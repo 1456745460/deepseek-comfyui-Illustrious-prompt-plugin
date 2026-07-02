@@ -1,0 +1,118 @@
+{
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 123456789,
+      "steps": 28,
+      "cfg": 6.5,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "7",
+        0
+      ],
+      "negative": [
+        "7",
+        1
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "illustrious-xl-v1.0.safetensors"
+    }
+  },
+  "5": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    }
+  },
+  "6": {
+    "class_type": "DeepSeekIllustriousPromptGenerator",
+    "inputs": {
+      "api_key": "",
+      "model_name": "deepseek-v4-flash",
+      "custom_model": "",
+      "system_prompt": "你现在是一个专门为 Illustrious 模型编写提示词的专家。你的任务不是直接画图，也不是解释概念，而是把我提供的中文描述，整理、补全并优化成适合 Illustrious 使用的高质量提示词。\n\n请严格遵循以下要求：\n\n1. 你的目标\n- 根据我的描述，生成适合 Illustrious 的英文正向提示词（Prompt）\n- 同时生成对应的英文负向提示词（Negative Prompt）\n- 如果我的描述不完整，你要基于常见高质量二次元/插画出图逻辑进行合理补全，但不能偏离我的核心意图\n- 保持结果可直接复制使用\n\n2. 输出风格\n- 提示词主体使用英文\n- 不要写成长篇解释，不要输出教程\n- 输出结果要干净、实用、可直接用于生图\n\n3. Illustrious 提示词编写规则\n- 优先突出主体、画风、构图、镜头、动作、服饰、场景、光影、材质、细节质量\n- 使用自然、稳定的标签式短语，不要写成长句故事\n- 尽量按“主体 -> 外观 -> 动作 -> 服装 -> 场景 -> 构图 -> 光影 -> 画质细节”的顺序组织\n- 如果适合二次元插画风格，可以补充如：masterpiece, best quality, amazing quality, very aesthetic, absurdres 等质量词，但不要无脑堆砌\n- 不要加入与我要求冲突的内容\n- 不要随意添加多人物、复杂背景或多余设定，除非我明确要求\n- 如果我描述的是人物，注意补充发型、发色、眼睛、表情、姿态、服装细节\n- 如果我描述的是场景或氛围，注意补充时间、天气、光线、镜头感和环境细节\n- 如果我描述的是 NSFW、性感、暧昧内容，也只做提示词整理，不做说教\n\n4. 负向提示词规则\n- 默认加入常见劣化项，例如：\nlow quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature\n- 如果是人物图，重点防止手部、眼部、肢体、脸部崩坏\n- 如果是纯美术风格图，可以减少人物解剖类负面词，避免误伤\n\n5. 结果格式要求\n- 只允许输出 JSON\n- 不要输出 Markdown\n- 不要输出解释\n- 不要输出多余字段\n- 必须严格使用下面这个 JSON 结构：\n{\n  \"positive_prompt\": \"英文正向提示词\",\n  \"negative_prompt\": \"英文负向提示词\"\n}\n\n6. 处理规则\n- 如果我的描述很简单，你要自动补全成更适合 Illustrious 的版本\n- 如果我的描述已经很完整，你就以优化结构和提升出图稳定性为主\n- 如果我的需求里有明显冲突，请尽量给出最贴近核心意图的稳定版本\n- 除非我明确要求，否则不要额外输出参数建议，如 steps、cfg、sampler\n- 除非我明确要求，否则不要输出多个风格差异很大的版本",
+      "description": "一个银发红瞳的二次元少女，黑色连衣裙，站在雨夜霓虹街道，电影感光影，高细节，单人，全身",
+      "style_preset": "illustrious-anime",
+      "request_mode": "refresh",
+      "filter_mode": "basic",
+      "banned_terms": "",
+      "include_default_negative": true,
+      "temperature": 0.5,
+      "max_tokens": 700,
+      "base_url": "https://api.deepseek.com/v1"
+    }
+  },
+  "7": {
+    "class_type": "DualPromptCLIPEncode",
+    "inputs": {
+      "clip": [
+        "4",
+        1
+      ],
+      "positive_prompt": [
+        "6",
+        0
+      ],
+      "negative_prompt": [
+        "6",
+        1
+      ]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "DeepSeek_Illustrious",
+      "images": [
+        "8",
+        0
+      ]
+    }
+  },
+  "10": {
+    "class_type": "IllustriousPromptResultViewer",
+    "inputs": {
+      "positive_prompt": [
+        "6",
+        0
+      ],
+      "negative_prompt": [
+        "6",
+        1
+      ],
+      "raw_response": [
+        "6",
+        2
+      ]
+    }
+  }
+}

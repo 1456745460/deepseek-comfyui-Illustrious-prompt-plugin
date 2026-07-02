@@ -1,0 +1,796 @@
+{
+  "id": "25df2d8b-294e-4b30-ab50-89fb8f4e0973",
+  "revision": 0,
+  "last_node_id": 22,
+  "last_link_id": 45,
+  "nodes": [
+    {
+      "id": 15,
+      "type": "LatentUpscaleBy",
+      "pos": [
+        564.3897361282726,
+        117.5492432529576
+      ],
+      "size": [
+        270,
+        82
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 32
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            33
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LatentUpscaleBy"
+      },
+      "widgets_values": [
+        "nearest-exact",
+        1.5
+      ]
+    },
+    {
+      "id": 14,
+      "type": "PreviewImage",
+      "pos": [
+        1191.1778693283773,
+        -206.27991485636156
+      ],
+      "size": [
+        440.2982179316364,
+        293.578690923384
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 31
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 8,
+      "type": "VAEDecode",
+      "pos": [
+        931.8970981392252,
+        -215.97966356628302
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 21
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 22
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            31
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 16,
+      "type": "VAEDecode",
+      "pos": [
+        929.897990799148,
+        300.26951703190747
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 34
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 35
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            36
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 4,
+      "type": "CheckpointLoaderSimple",
+      "pos": [
+        -661.5411549434673,
+        -191.29588499786556
+      ],
+      "size": [
+        273.4576171875,
+        98
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            14,
+            27
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            18
+          ]
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            22,
+            35
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CheckpointLoaderSimple"
+      },
+      "widgets_values": [
+        "oneObsessionBranch_v6MatureEPS.safetensors"
+      ]
+    },
+    {
+      "id": 3,
+      "type": "KSampler",
+      "pos": [
+        561.8970981392237,
+        -215.97966356628302
+      ],
+      "size": [
+        270,
+        262
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 14
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 15
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 16
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 17
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            21,
+            32
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        721381062322902,
+        "randomize",
+        25,
+        6.5,
+        "dpmpp_2m_sde",
+        "karras",
+        1
+      ]
+    },
+    {
+      "id": 5,
+      "type": "EmptyLatentImage",
+      "pos": [
+        -662.6967046175181,
+        -4.512071088674844
+      ],
+      "size": [
+        270,
+        106
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            17
+          ]
+        }
+      ],
+      "title": "1024*1024",
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ]
+    },
+    {
+      "id": 18,
+      "type": "EmptyLatentImage",
+      "pos": [
+        -665.3322225965584,
+        164.995659718336
+      ],
+      "size": [
+        270,
+        106
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "title": "1024*1536",
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "widgets_values": [
+        1024,
+        1536,
+        1
+      ]
+    },
+    {
+      "id": 19,
+      "type": "EmptyLatentImage",
+      "pos": [
+        -664.153805516341,
+        333.39996452216843
+      ],
+      "size": [
+        270,
+        106
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "title": "1536*1024",
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "widgets_values": [
+        1536,
+        1024,
+        1
+      ]
+    },
+    {
+      "id": 13,
+      "type": "KSampler",
+      "pos": [
+        562.9650438324004,
+        289.4576857731444
+      ],
+      "size": [
+        270,
+        262
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 27
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 28
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 29
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 33
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            34
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        255266994463565,
+        "randomize",
+        25,
+        6.5,
+        "dpmpp_2m_sde",
+        "karras",
+        1
+      ]
+    },
+    {
+      "id": 17,
+      "type": "PreviewImage",
+      "pos": [
+        1191.5648429653365,
+        298.1828664485
+      ],
+      "size": [
+        448.3135937085008,
+        320.3576528715496
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 36
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 7,
+      "type": "DualPromptCLIPEncode",
+      "pos": [
+        -93.76669584120397,
+        594.7793471859294
+      ],
+      "size": [
+        322.48744285856367,
+        141.45428861890554
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 18
+        },
+        {
+          "name": "positive_prompt",
+          "type": "STRING",
+          "link": null
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            15,
+            28
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            16,
+            29
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "DualPromptCLIPEncode"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 21,
+      "type": "IllustriousPromptResultViewer",
+      "pos": [
+        -103.42897426107962,
+        797.0473192196708
+      ],
+      "size": [
+        481.13244236384605,
+        797.5120069135447
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive_prompt",
+          "type": "STRING",
+          "link": 43
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING",
+          "link": 44
+        },
+        {
+          "name": "raw_response",
+          "type": "STRING",
+          "link": 45
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive_prompt",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "raw_response",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "IllustriousPromptResultViewer"
+      },
+      "widgets_values": [
+        "[Positive Prompt]\n1girl, beautiful, little girl, big eyes, smile, long hair, looking at viewer, simple clothes, soft lighting, masterpiece, best quality, amazing quality, very aesthetic, absurdres\n\n[Negative Prompt]\nlow quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature, jpeg artifacts\n\n[Raw Response]\n{\n  \"positive_prompt\": \"1girl, beautiful, little girl, big eyes, smile, long hair, looking at viewer, simple clothes, soft lighting, masterpiece, best quality, amazing quality, very aesthetic, absurdres\",\n  \"negative_prompt\": \"low quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature\"\n}"
+      ]
+    },
+    {
+      "id": 22,
+      "type": "DeepSeekIllustriousPromptGenerator",
+      "pos": [
+        -649.5382334434706,
+        597.9364016349873
+      ],
+      "size": [
+        478.69854373252156,
+        997.0005694365816
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "llm_config",
+          "shape": 7,
+          "type": "LLM_CONFIG",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive_prompt",
+          "type": "STRING",
+          "links": [
+            43
+          ]
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING",
+          "links": [
+            44
+          ]
+        },
+        {
+          "name": "raw_response",
+          "type": "STRING",
+          "links": [
+            45
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "DeepSeekIllustriousPromptGenerator"
+      },
+      "widgets_values": [
+        "",
+        "deepseek-v4-flash",
+        "",
+        "你现在是一个专门为 Illustrious 模型编写提示词的专家。你的任务不是直接画图，也不是解释概念，而是把我提供的中文描述，整理、补全并优化成适合 Illustrious 使用的高质量提示词。\n\n请严格遵循以下要求：\n\n1. 你的目标\n- 根据我的描述，生成适合 Illustrious 的英文正向提示词（Prompt）\n- 同时生成对应的英文负向提示词（Negative Prompt）\n- 如果我的描述不完整，你要基于常见高质量二次元/插画出图逻辑进行合理补全，但不能偏离我的核心意图\n- 保持结果可直接复制使用\n\n2. 输出风格\n- 提示词主体使用英文\n- 不要写成长篇解释，不要输出教程\n- 输出结果要干净、实用、可直接用于生图\n\n3. Illustrious 提示词编写规则\n- 优先突出主体、画风、构图、镜头、动作、服饰、场景、光影、材质、细节质量\n- 使用自然、稳定的标签式短语，不要写成长句故事\n- 尽量按“主体 -> 外观 -> 动作 -> 服装 -> 场景 -> 构图 -> 光影 -> 画质细节”的顺序组织\n- 如果适合二次元插画风格，可以补充如：masterpiece, best quality, amazing quality, very aesthetic, absurdres 等质量词，但不要无脑堆砌\n- 不要加入与我要求冲突的内容\n- 不要随意添加多人物、复杂背景或多余设定，除非我明确要求\n- 如果我描述的是人物，注意补充发型、发色、眼睛、表情、姿态、服装细节\n- 如果我描述的是场景或氛围，注意补充时间、天气、光线、镜头感和环境细节\n- 如果我描述的是 NSFW、性感、暧昧内容，也只做提示词整理，不做说教\n\n4. 负向提示词规则\n- 默认加入常见劣化项，例如：\nlow quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature\n- 如果是人物图，重点防止手部、眼部、肢体、脸部崩坏\n- 如果是纯美术风格图，可以减少人物解剖类负面词，避免误伤\n\n5. 结果格式要求\n- 只允许输出 json\n- 不要输出 Markdown\n- 不要输出解释\n- 不要输出多余字段\n- 必须严格使用下面这个 json 结构：\n{\n  \"positive_prompt\": \"英文正向提示词\",\n  \"negative_prompt\": \"英文负向提示词\"\n}\n\n6. 处理规则\n- 如果我的描述很简单，你要自动补全成更适合 Illustrious 的版本\n- 如果我的描述已经很完整，你就以优化结构和提升出图稳定性为主\n- 如果我的需求里有明显冲突，请尽量给出最贴近核心意图的稳定版本\n- 除非我明确要求，否则不要额外输出参数建议，如 steps、cfg、sampler\n- 除非我明确要求，否则不要输出多个风格差异很大的版本\n",
+        "一个漂亮的小女孩",
+        "illustrious-nsfw",
+        "refresh",
+        "basic",
+        "",
+        true,
+        0.5,
+        700,
+        "https://api.deepseek.com/v1"
+      ]
+    }
+  ],
+  "links": [
+    [
+      14,
+      4,
+      0,
+      3,
+      0,
+      "MODEL"
+    ],
+    [
+      15,
+      7,
+      0,
+      3,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      16,
+      7,
+      1,
+      3,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      17,
+      5,
+      0,
+      3,
+      3,
+      "LATENT"
+    ],
+    [
+      18,
+      4,
+      1,
+      7,
+      0,
+      "CLIP"
+    ],
+    [
+      21,
+      3,
+      0,
+      8,
+      0,
+      "LATENT"
+    ],
+    [
+      22,
+      4,
+      2,
+      8,
+      1,
+      "VAE"
+    ],
+    [
+      27,
+      4,
+      0,
+      13,
+      0,
+      "MODEL"
+    ],
+    [
+      28,
+      7,
+      0,
+      13,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      29,
+      7,
+      1,
+      13,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      31,
+      8,
+      0,
+      14,
+      0,
+      "IMAGE"
+    ],
+    [
+      32,
+      3,
+      0,
+      15,
+      0,
+      "LATENT"
+    ],
+    [
+      33,
+      15,
+      0,
+      13,
+      3,
+      "LATENT"
+    ],
+    [
+      34,
+      13,
+      0,
+      16,
+      0,
+      "LATENT"
+    ],
+    [
+      35,
+      4,
+      2,
+      16,
+      1,
+      "VAE"
+    ],
+    [
+      36,
+      16,
+      0,
+      17,
+      0,
+      "IMAGE"
+    ],
+    [
+      43,
+      22,
+      0,
+      21,
+      0,
+      "STRING"
+    ],
+    [
+      44,
+      22,
+      1,
+      21,
+      1,
+      "STRING"
+    ],
+    [
+      45,
+      22,
+      2,
+      21,
+      2,
+      "STRING"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "deepseek",
+      "bounding": [
+        -672.0240218146097,
+        522.6706869463617,
+        1072.6462676236245,
+        1095.130323784113
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.8769226950000245,
+      "offset": [
+        892.9088251906152,
+        -59.20601690188374
+      ]
+    },
+    "frontendVersion": "1.42.15"
+  },
+  "version": 0.4
+}
