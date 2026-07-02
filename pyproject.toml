@@ -1,0 +1,14 @@
+[project]
+name = "deepseek-comfyui-illustrious-prompt-plugin"
+description = "DeepSeek-powered Illustrious prompt generator nodes for ComfyUI."
+version = "1.0.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/1456745460/deepseek-comfyui-Illustrious-prompt-plugin"
+
+[tool.comfy]
+PublisherId = "wangbingbing"
+DisplayName = "DeepSeek ComfyUI Illustrious Prompt Plugin"
+Icon = ""
