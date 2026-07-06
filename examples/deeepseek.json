@@ -1,0 +1,164 @@
+{
+  "id": "9dd41dd0-5500-409e-acc2-64e18f75ddf5",
+  "revision": 0,
+  "last_node_id": 27,
+  "last_link_id": 33,
+  "nodes": [
+    {
+      "id": 26,
+      "type": "DeepSeekIllustriousPromptGenerator",
+      "pos": [
+        1113.9439050289352,
+        946.4731986077338
+      ],
+      "size": [
+        420,
+        760
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "llm_config",
+          "shape": 7,
+          "type": "LLM_CONFIG",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive_prompt",
+          "type": "STRING",
+          "links": [
+            31
+          ]
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING",
+          "links": [
+            32
+          ]
+        },
+        {
+          "name": "raw_response",
+          "type": "STRING",
+          "links": [
+            33
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "DeepSeekIllustriousPromptGenerator"
+      },
+      "widgets_values": [
+        "deepseek-v4-flash",
+        "",
+        "你现在是一个专门为 Illustrious 模型编写提示词的专家。你的任务不是直接画图，也不是解释概念，而是把我提供的中文描述，整理、补全并优化成适合 Illustrious 使用的高质量提示词。\n\n请严格遵循以下要求：\n\n1. 你的目标\n- 根据我的描述，生成适合 Illustrious 的英文正向提示词（Prompt）\n- 同时生成对应的英文负向提示词（Negative Prompt）\n- 如果我的描述不完整，你要基于常见高质量二次元/插画出图逻辑进行合理补全，但不能偏离我的核心意图\n- 保持结果可直接复制使用\n\n2. 输出风格\n- 提示词主体使用英文\n- 不要写成长篇解释，不要输出教程\n- 输出结果要干净、实用、可直接用于生图\n\n3. Illustrious 提示词编写规则\n- 优先突出主体、画风、构图、镜头、动作、服饰、场景、光影、材质、细节质量\n- 使用自然、稳定的标签式短语，不要写成长句故事\n- 尽量按“主体 -> 外观 -> 动作 -> 服装 -> 场景 -> 构图 -> 光影 -> 画质细节”的顺序组织\n- 如果适合二次元插画风格，可以补充如：masterpiece, best quality, amazing quality, very aesthetic, absurdres 等质量词，但不要无脑堆砌\n- 不要加入与我要求冲突的内容\n- 不要随意添加多人物、复杂背景或多余设定，除非我明确要求\n- 如果我描述的是人物，注意补充发型、发色、眼睛、表情、姿态、服装细节\n- 如果我描述的是场景或氛围，注意补充时间、天气、光线、镜头感和环境细节\n- 如果我描述的是 NSFW、性感、暧昧内容，也只做提示词整理，不做说教\n\n4. 负向提示词规则\n- 默认加入常见劣化项，例如：\nlow quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature\n- 如果是人物图，重点防止手部、眼部、肢体、脸部崩坏\n- 如果是纯美术风格图，可以减少人物解剖类负面词，避免误伤\n\n5. 结果格式要求\n- 只允许输出 json\n- 不要输出 Markdown\n- 不要输出解释\n- 不要输出多余字段\n- 必须严格使用下面这个 json 结构：\n{\n  \"positive_prompt\": \"英文正向提示词\",\n  \"negative_prompt\": \"英文负向提示词\"\n}\n\n6. 处理规则\n- 如果我的描述很简单，你要自动补全成更适合 Illustrious 的版本\n- 如果我的描述已经很完整，你就以优化结构和提升出图稳定性为主\n- 如果我的需求里有明显冲突，请尽量给出最贴近核心意图的稳定版本\n- 除非我明确要求，否则不要额外输出参数建议，如 steps、cfg、sampler\n- 除非我明确要求，否则不要输出多个风格差异很大的版本",
+        "nsfw",
+        "glasses,ugly,",
+        "一个熟女",
+        "illustrious-general",
+        3,
+        0.5,
+        700,
+        "https://api.deepseek.com/v1"
+      ]
+    },
+    {
+      "id": 27,
+      "type": "IllustriousPromptResultViewer",
+      "pos": [
+        1585.4321565914354,
+        948.5088021233584
+      ],
+      "size": [
+        520,
+        720
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive_prompt",
+          "type": "STRING",
+          "link": 31
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING",
+          "link": 32
+        },
+        {
+          "name": "raw_response",
+          "type": "STRING",
+          "link": 33
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive_prompt",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "raw_response",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "IllustriousPromptResultViewer"
+      },
+      "widgets_values": [
+        "[Positive Prompt]\nnsfw, 1girl, mature woman, long hair, red hair, blue eyes, seductive smile, elegant, wearing a black dress, cleavage, standing, indoors, luxury room, soft lighting, detailed face, beautiful eyes, intricate details, masterpiece, best quality, amazing quality, very aesthetic, absurdres\n\n[Negative Prompt]\nglasses, ugly, low quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature, young, loli, child\n\n[Raw Response]\n{\n  \"positive_prompt\": \"1girl, mature woman, long hair, red hair, blue eyes, seductive smile, elegant, wearing a black dress, cleavage, standing, indoors, luxury room, soft lighting, detailed face, beautiful eyes, intricate details, masterpiece, best quality, amazing quality, very aesthetic, absurdres\",\n  \"negative_prompt\": \"low quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature, young, loli, child\"\n}"
+      ]
+    }
+  ],
+  "links": [
+    [
+      31,
+      26,
+      0,
+      27,
+      0,
+      "STRING"
+    ],
+    [
+      32,
+      26,
+      1,
+      27,
+      1,
+      "STRING"
+    ],
+    [
+      33,
+      26,
+      2,
+      27,
+      2,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.8264462809917354,
+      "offset": [
+        -816.9894748689279,
+        -687.7513423007968
+      ]
+    },
+    "frontendVersion": "1.42.15"
+  },
+  "version": 0.4
+}
