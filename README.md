@@ -6,6 +6,16 @@
 
 - `DeepSeek Illustrious Prompt - v1.2`
 
+## 界面示例
+
+主节点界面示例：
+
+![DeepSeek Illustrious Prompt UI](docs/images/iShot_2026-07-06_11.11.05.png)
+
+风格预设切换示例：
+
+![Style Preset UI](docs/images/iShot_2026-07-06_11.11.18.png)
+
 ## 当前功能
 
 - 从 `config/deepseek_config.json` 读取 DeepSeek 的 `api_key`、`base_url`、`model`
