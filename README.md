@@ -18,8 +18,8 @@
 
 ## 当前功能
 
-- 从 `config/deepseek_config.json` 读取 DeepSeek 的 `api_key`、`base_url`、`model`
-- 从 `config/deepseek_config.json` 读取四套 `style_preset` 对应的 `system_prompt`
+- 从 `config/deepseek_config.ini` 读取 DeepSeek 的 `api_key`、`base_url`、`model`
+- 从 `config/deepseek_config.ini` 读取四套 `style_preset` 对应的 `system_prompt`
 - 支持在节点里直接覆盖 `system_prompt`
 - 支持基础正向提示词、基础负向提示词与模型结果合并
 - 支持 `json_retry_count`，当模型返回非合法 JSON 时自动重试
@@ -71,7 +71,7 @@
 处理逻辑：
 
 - 如果连接了 `llm_config`，优先使用 `llm_config` 里的 `api_key`、`base_url`、`model`
-- 如果没有连接 `llm_config`，优先使用 `config/deepseek_config.json`
+- 如果没有连接 `llm_config`，优先使用 `config/deepseek_config.ini`
 - 如果 `system_prompt` 输入框为空，则自动读取当前 `style_preset` 在配置文件里的内容
 - 模型返回后会尝试解析 JSON；如果不是合法 JSON，会做容错提取
 - 若仍然无法提取到 `positive_prompt` / `negative_prompt`，会按 `json_retry_count` 自动重试
@@ -119,24 +119,26 @@
 配置文件路径：
 
 ```bash
-ComfyUI/custom_nodes/deepseek-comfyui-Illustrious-prompt-plugin/config/deepseek_config.json
+ComfyUI/custom_nodes/deepseek-comfyui-Illustrious-prompt-plugin/config/deepseek_config.ini
 ```
 
 示例：
 
-```json
-{
-  "api_key": "sk-xxxxxxxxxxxxxxxx",
-  "base_url": "https://api.deepseek.com/v1",
-  "model": "deepseek-v4-flash",
-  "json_retry_count": 3,
-  "system_prompts": {
-    "illustrious-general": "在这里填写 general 的 system prompt",
-    "illustrious-anime": "在这里填写 anime 的 system prompt",
-    "illustrious-portrait": "在这里填写 portrait 的 system prompt",
-    "illustrious-nsfw": ""
-  }
-}
+```ini
+[deepseek]
+api_key = sk-xxxxxxxxxxxxxxxx
+base_url = https://api.deepseek.com/v1
+model = deepseek-v4-flash
+json_retry_count = 3
+
+[system_prompts]
+illustrious-general =
+    在这里填写 general 的 system prompt
+illustrious-anime =
+    在这里填写 anime 的 system prompt
+illustrious-portrait =
+    在这里填写 portrait 的 system prompt
+illustrious-nsfw =
 ```
 
 字段说明：
@@ -154,6 +156,7 @@ ComfyUI/custom_nodes/deepseek-comfyui-Illustrious-prompt-plugin/config/deepseek_
 
 说明：
 
+- `INI` 支持多行原样书写 `system_prompt`，不再需要手动写 `\n`、`\"` 转义
 - 切换 `style_preset` 时，前端会自动把对应的 `system_prompt` 带到节点输入框
 - 如果你想完全自己控制提示词，也可以直接在节点里改 `system_prompt`
 
@@ -230,5 +233,5 @@ ComfyUI/custom_nodes/deepseek-comfyui-Illustrious-prompt-plugin
 ## 备注
 
 - 默认 Base URL：`https://api.deepseek.com/v1`
-- 默认配置文件：`config/deepseek_config.json`
+- 默认配置文件：`config/deepseek_config.ini`
 - 主节点默认标题：`DeepSeek Illustrious Prompt - v1.2`

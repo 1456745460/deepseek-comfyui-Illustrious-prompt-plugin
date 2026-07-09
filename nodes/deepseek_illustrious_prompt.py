@@ -1,3 +1,4 @@
+import configparser
 import json
 import math
 from pathlib import Path
@@ -12,7 +13,8 @@ DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 NODE_VERSION = "v1.2"
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = PLUGIN_ROOT / "config"
-CONFIG_PATH = CONFIG_DIR / "deepseek_config.json"
+CONFIG_PATH = CONFIG_DIR / "deepseek_config.ini"
+LEGACY_CONFIG_PATH = CONFIG_DIR / "deepseek_config.json"
 STYLE_PRESET_KEYS = [
     "illustrious-general",
     "illustrious-anime",
@@ -131,21 +133,18 @@ def _resolve_model(model_name: str, custom_model: str) -> str:
     return model_name.strip()
 
 
-def _load_file_config() -> Dict[str, str]:
-    if not CONFIG_PATH.exists():
-        return {}
-
-    try:
-        raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"配置文件格式错误，请检查 {CONFIG_PATH}: {exc}") from exc
-
+def _normalize_file_config(raw: Dict[str, Any], source_path: Path) -> Dict[str, Any]:
     if not isinstance(raw, dict):
-        raise ValueError(f"配置文件内容必须是 JSON 对象: {CONFIG_PATH}")
+        raise ValueError(f"配置文件内容必须是对象: {source_path}")
 
     system_prompts_raw = raw.get("system_prompts", {}) or {}
     if not isinstance(system_prompts_raw, dict):
         system_prompts_raw = {}
+
+    try:
+        json_retry_count = max(0, int(raw.get("json_retry_count", 3) or 0))
+    except (TypeError, ValueError):
+        json_retry_count = 3
 
     system_prompts = {
         preset: str(system_prompts_raw.get(preset, "") or "").strip()
@@ -156,9 +155,52 @@ def _load_file_config() -> Dict[str, str]:
         "api_key": str(raw.get("api_key", "") or "").strip(),
         "base_url": str(raw.get("base_url", "") or "").strip(),
         "model": str(raw.get("model", "") or "").strip(),
-        "json_retry_count": max(0, int(raw.get("json_retry_count", 3) or 0)),
+        "json_retry_count": json_retry_count,
         "system_prompts": system_prompts,
     }
+
+
+def _load_ini_file_config(path: Path) -> Dict[str, Any]:
+    parser = configparser.ConfigParser(interpolation=None)
+    try:
+        parser.read(path, encoding="utf-8")
+    except configparser.Error as exc:
+        raise ValueError(f"配置文件格式错误，请检查 {path}: {exc}") from exc
+
+    deepseek_section = parser["deepseek"] if parser.has_section("deepseek") else {}
+    system_prompts = {}
+    if parser.has_section("system_prompts"):
+        for preset in STYLE_PRESET_KEYS:
+            system_prompts[preset] = str(parser.get("system_prompts", preset, fallback="") or "").strip()
+
+    raw = {
+        "api_key": deepseek_section.get("api_key", ""),
+        "base_url": deepseek_section.get("base_url", ""),
+        "model": deepseek_section.get("model", ""),
+        "json_retry_count": deepseek_section.get("json_retry_count", 3),
+        "system_prompts": system_prompts,
+    }
+    return _normalize_file_config(raw, path)
+
+
+def _load_json_file_config(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"配置文件格式错误，请检查 {path}: {exc}") from exc
+
+    return _normalize_file_config(raw, path)
+
+
+def _load_file_config() -> Dict[str, Any]:
+    if CONFIG_PATH.exists():
+        return _load_ini_file_config(CONFIG_PATH)
+    if LEGACY_CONFIG_PATH.exists():
+        return _load_json_file_config(LEGACY_CONFIG_PATH)
+    return {}
 
 
 def get_system_prompt_presets() -> Dict[str, str]:
