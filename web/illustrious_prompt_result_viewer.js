@@ -29,7 +29,7 @@ const DEEPSEEK_DEFAULTS = {
     style_preset: "illustrious-general",
     json_retry_count: 3,
     temperature: 0.5,
-    max_tokens: 700,
+    max_tokens: 2000,
     base_url: "https://api.deepseek.com/v1",
 };
 

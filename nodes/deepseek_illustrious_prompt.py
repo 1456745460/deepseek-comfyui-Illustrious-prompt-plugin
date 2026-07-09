@@ -305,7 +305,7 @@ class DeepSeekIllustriousPromptGenerator:
                 ),
                 "json_retry_count": ("INT", {"default": 3, "min": 0, "max": 10, "step": 1}),
                 "temperature": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.5, "step": 0.05}),
-                "max_tokens": ("INT", {"default": 700, "min": 128, "max": 4096, "step": 1}),
+                "max_tokens": ("INT", {"default": 2000, "min": 128, "max": 4096, "step": 1}),
             },
             "optional": {
                 "base_url": ("STRING", {"default": DEFAULT_BASE_URL, "multiline": False}),
