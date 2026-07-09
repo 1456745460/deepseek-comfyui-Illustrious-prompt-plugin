@@ -18,6 +18,14 @@ STYLE_PRESET_KEYS = [
     "illustrious-anime",
     "illustrious-portrait",
     "illustrious-nsfw",
+    "illustrious-sweet",
+    "illustrious-photo",
+    "illustrious-poster",
+    "illustrious-chinese",
+    "illustrious-cyberpunk",
+    "illustrious-fantasy",
+    "illustrious-idol",
+    "illustrious-horror",
 ]
 
 DEFAULT_SYSTEM_PROMPT = ""
@@ -207,6 +215,14 @@ def _build_user_prompt(
 class DeepSeekIllustriousPromptGenerator:
     @classmethod
     def INPUT_TYPES(cls):
+        try:
+            presets = list(_load_file_config().get("system_prompts", {}).keys())
+        except Exception:
+            presets = []
+        if not presets:
+            presets = list(STYLE_PRESET_KEYS)
+        default_preset = presets[0] if presets else "illustrious-general"
+
         return {
             "required": {
                 "model_name": (
@@ -242,8 +258,8 @@ class DeepSeekIllustriousPromptGenerator:
                 ),
                 "description": ("STRING", {"default": "", "multiline": True, "placeholder": "输入你的中文需求描述"}),
                 "style_preset": (
-                    ["illustrious-general", "illustrious-anime", "illustrious-portrait", "illustrious-nsfw"],
-                    {"default": "illustrious-general"},
+                    presets,
+                    {"default": default_preset},
                 ),
                 "json_retry_count": ("INT", {"default": 3, "min": 0, "max": 10, "step": 1}),
                 "temperature": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.5, "step": 0.05}),
