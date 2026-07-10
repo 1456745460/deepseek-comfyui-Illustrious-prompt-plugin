@@ -89,7 +89,7 @@ app.registerExtension({
 
                 const maxTokensWidget = getWidget(node, "max_tokens");
                 const parsedMaxTokens = Number(maxTokensWidget?.value);
-                if (maxTokensWidget && !(Number.isInteger(parsedMaxTokens) && parsedMaxTokens >= 128 && parsedMaxTokens <= 4096)) {
+                if (maxTokensWidget && !(Number.isInteger(parsedMaxTokens) && parsedMaxTokens >= 128 && parsedMaxTokens <= 8192)) {
                     setWidgetValue(maxTokensWidget, DEEPSEEK_DEFAULTS.max_tokens);
                 }
 
@@ -144,6 +144,34 @@ app.registerExtension({
                 if (name === "style_preset") {
                     applyPresetToNode(this, value, true);
                 }
+                return result;
+            };
+
+            const originalOnExecuted = nodeType.prototype.onExecuted;
+            nodeType.prototype.onExecuted = function (message) {
+                const result = originalOnExecuted ? originalOnExecuted.apply(this, arguments) : undefined;
+
+                let finalMaxTokens = undefined;
+                if (message?.ui?.max_tokens !== undefined) {
+                    finalMaxTokens = message.ui.max_tokens;
+                } else if (message?.max_tokens !== undefined) {
+                    finalMaxTokens = message.max_tokens;
+                }
+
+                if (Array.isArray(finalMaxTokens)) {
+                    finalMaxTokens = finalMaxTokens[0];
+                }
+
+                const parsedMaxTokens = Number(finalMaxTokens);
+                if (Number.isInteger(parsedMaxTokens) && parsedMaxTokens >= 128 && parsedMaxTokens <= 8192) {
+                    const maxTokensWidget = getWidget(this, "max_tokens");
+                    if (maxTokensWidget && Number(maxTokensWidget.value) !== parsedMaxTokens) {
+                        setWidgetValue(maxTokensWidget, parsedMaxTokens);
+                        this.setDirtyCanvas?.(true, true);
+                        app.graph.setDirtyCanvas(true, true);
+                    }
+                }
+
                 return result;
             };
 

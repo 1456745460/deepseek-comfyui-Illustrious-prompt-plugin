@@ -214,7 +214,9 @@ ComfyUI/custom_nodes/deepseek-comfyui-Illustrious-prompt-plugin
 ```json
 {
   "positive_prompt": "...",
-  "negative_prompt": "..."
+  "positive_prompt_chinese": "...",
+  "negative_prompt": "...",
+  "negative_prompt_chinese": "..."
 }
 ```
 

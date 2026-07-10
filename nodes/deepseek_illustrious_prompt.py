@@ -89,10 +89,14 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
 
         positive_prompt = extract_field("positive_prompt")
         negative_prompt = extract_field("negative_prompt")
-        if positive_prompt or negative_prompt:
+        positive_prompt_chinese = extract_field("positive_prompt_chinese")
+        negative_prompt_chinese = extract_field("negative_prompt_chinese")
+        if positive_prompt or negative_prompt or positive_prompt_chinese or negative_prompt_chinese:
             return {
                 "positive_prompt": positive_prompt,
                 "negative_prompt": negative_prompt,
+                "positive_prompt_chinese": positive_prompt_chinese,
+                "negative_prompt_chinese": negative_prompt_chinese,
             }
 
         raise ValueError(f"模型返回中未找到合法 JSON 或可提取字段。原始返回: {cleaned[:500]}")
@@ -121,16 +125,82 @@ def _clean_prompt_text(text: str) -> str:
     cleaned = _strip_think_blocks(text)
     cleaned = cleaned.replace("，", ", ").replace("；", ", ").replace("：", ": ")
     cleaned = re.sub(r"\s*\n+\s*", ", ", cleaned)
-    cleaned = re.sub(r"^(positive_prompt|negative_prompt|prompt)\s*:\s*", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"^(positive_prompt(?:_chinese)?|negative_prompt(?:_chinese)?|prompt)\s*:\s*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
     cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" ,")
     cleaned = _dedupe_tokens(cleaned)
     return cleaned.strip(" ,")
+
+
+def _clean_chinese_prompt_text(text: str) -> str:
+    """中文提示词清洗：保留中文语义，仅做基础整理。"""
+    if not text:
+        return ""
+
+    cleaned = _strip_think_blocks(text)
+    cleaned = re.sub(
+        r"^(positive_prompt(?:_chinese)?|negative_prompt(?:_chinese)?|prompt)\s*[:：]\s*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\s*\n+\s*", "，", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"[，,]{2,}", "，", cleaned)
+    return cleaned.strip(" ，,")
+
 
 
 def _resolve_model(model_name: str, custom_model: str) -> str:
     if model_name == "custom":
         return custom_model.strip()
     return model_name.strip()
+
+
+AUTO_MAX_TOKENS_CAP = 8192
+AUTO_MAX_TOKEN_BOOSTS = 3
+
+
+def _boost_max_tokens(current: int, cap: int = AUTO_MAX_TOKENS_CAP) -> int:
+    """Incomplete response 时适度提高 max_tokens。"""
+    current = max(1, int(current or 1))
+    cap = max(current, int(cap or current))
+    boosted = max(int(current * 1.5), current + 512)
+    return min(cap, boosted)
+
+
+def _is_response_incomplete(choice: Dict[str, Any], raw_response: str) -> bool:
+    """判断模型输出是否因 token 上限等原因被截断。"""
+    finish_reason = str(choice.get("finish_reason") or "").strip().lower()
+    if finish_reason in {"length", "max_tokens", "max_output_tokens"}:
+        return True
+
+    text = _strip_think_blocks(raw_response or "")
+    if not text:
+        return False
+
+    # 未闭合 JSON 对象，通常是输出中途被截断
+    if text.count("{") > text.count("}"):
+        return True
+    if text.count("[") > text.count("]"):
+        return True
+
+    # 截断在字符串中间的常见形态
+    stripped = text.rstrip()
+    if stripped.endswith(('\\', ',', ':', '"')) and '{' in stripped:
+        return True
+
+    return False
+
+
+def _has_usable_prompt_fields(parsed: Dict[str, Any]) -> bool:
+    positive = str(parsed.get("positive_prompt", "") or "").strip()
+    negative = str(parsed.get("negative_prompt", "") or "").strip()
+    return bool(positive or negative)
 
 
 def _normalize_file_config(raw: Dict[str, Any], source_path: Path) -> Dict[str, Any]:
@@ -247,10 +317,13 @@ def _build_user_prompt(
 ) -> str:
     return (
         "Generate an Illustrious-ready positive prompt and negative prompt.\n"
-        "Return valid json only.\n"
+        "Also provide Chinese translations for both prompts.\n"
+        "Return valid json only with keys: "
+        "positive_prompt, positive_prompt_chinese, negative_prompt, negative_prompt_chinese.\n"
         f"Style preset: {style_preset}\n"
         f"User description: {description.strip()}\n"
-        "Keep the positive prompt tag-like, concise, visually rich, and suitable for direct image generation."
+        "Keep the English positive prompt tag-like, concise, visually rich, and suitable for direct image generation.\n"
+        "Chinese fields should be faithful translations of the English prompts."
     )
 
 
@@ -305,7 +378,7 @@ class DeepSeekIllustriousPromptGenerator:
                 ),
                 "json_retry_count": ("INT", {"default": 3, "min": 0, "max": 10, "step": 1}),
                 "temperature": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.5, "step": 0.05}),
-                "max_tokens": ("INT", {"default": 2000, "min": 128, "max": 4096, "step": 1}),
+                "max_tokens": ("INT", {"default": 2000, "min": 128, "max": 8192, "step": 1}),
             },
             "optional": {
                 "base_url": ("STRING", {"default": DEFAULT_BASE_URL, "multiline": False}),
@@ -317,8 +390,14 @@ class DeepSeekIllustriousPromptGenerator:
     def IS_CHANGED(cls, **kwargs):
         return math.nan
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING")
-    RETURN_NAMES = ("positive_prompt", "negative_prompt", "raw_response")
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = (
+        "positive_prompt",
+        "positive_prompt_chinese",
+        "negative_prompt",
+        "negative_prompt_chinese",
+        "raw_response",
+    )
     FUNCTION = "generate"
     CATEGORY = "DeepSeek/Illustrious"
 
@@ -364,15 +443,23 @@ class DeepSeekIllustriousPromptGenerator:
                 },
             ],
             "temperature": temperature,
-            "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
         }
 
         retry_count = max(0, int(json_retry_count if json_retry_count is not None else get_json_retry_count()))
+        current_max_tokens = max(128, int(max_tokens or 128))
+        token_cap = max(current_max_tokens, AUTO_MAX_TOKENS_CAP)
+        max_token_boosts = AUTO_MAX_TOKEN_BOOSTS
+
         last_parse_error = None
         raw_response = ""
+        parsed = None
+        parse_failures = 0
+        token_boosts = 0
 
-        for attempt in range(retry_count + 1):
+        # 解析失败会重试；若判定为输出截断，则额外自动提高 max_tokens 再重试
+        while True:
+            payload["max_tokens"] = current_max_tokens
             try:
                 data = _post_json(resolved_base_url, resolved_api_key, payload)
             except urllib.error.HTTPError as exc:
@@ -385,21 +472,44 @@ class DeepSeekIllustriousPromptGenerator:
             if not choices:
                 raise RuntimeError(f"模型未返回 choices: {json.dumps(data, ensure_ascii=False)[:500]}")
 
-            raw_response = choices[0].get("message", {}).get("content", "")
+            choice = choices[0] if isinstance(choices[0], dict) else {}
+            raw_response = choice.get("message", {}).get("content", "") if isinstance(choice, dict) else ""
+            incomplete = _is_response_incomplete(choice, raw_response)
+
+            # 只要判定输出被截断，就优先自动提高 max_tokens 再重试
+            if incomplete and token_boosts < max_token_boosts and current_max_tokens < token_cap:
+                next_max_tokens = _boost_max_tokens(current_max_tokens, token_cap)
+                if next_max_tokens > current_max_tokens:
+                    current_max_tokens = next_max_tokens
+                    token_boosts += 1
+                    continue
+
             try:
-                parsed = _extract_json_object(raw_response)
+                candidate = _extract_json_object(raw_response)
+                if not _has_usable_prompt_fields(candidate):
+                    raise ValueError("模型返回 JSON 中未提取到可用的 positive_prompt / negative_prompt")
+                parsed = candidate
                 break
             except ValueError as exc:
                 last_parse_error = exc
-                if attempt >= retry_count:
-                    raise RuntimeError(
-                        f"DeepSeek 返回内容多次无法解析为目标 JSON，已重试 {retry_count} 次。最后一次返回: {raw_response[:500]}"
-                    ) from exc
-        else:
-            raise RuntimeError(f"DeepSeek 返回内容无法解析为目标 JSON: {str(last_parse_error)[:500]}")
+                if parse_failures >= retry_count:
+                    detail = (
+                        f"DeepSeek 返回内容多次无法解析为目标 JSON，已重试 {retry_count} 次"
+                        f"（其中因截断自动提高 max_tokens {token_boosts} 次，最终 max_tokens={current_max_tokens}）。"
+                        f"最后一次返回: {raw_response[:500]}"
+                    )
+                    raise RuntimeError(detail) from exc
+                parse_failures += 1
+
+        if parsed is None:
+            raise RuntimeError(
+                f"DeepSeek 返回内容无法解析为目标 JSON: {str(last_parse_error)[:500]}"
+            )
 
         positive_prompt = _clean_prompt_text(parsed.get("positive_prompt", ""))
         negative_prompt = _clean_prompt_text(parsed.get("negative_prompt", ""))
+        positive_prompt_chinese = _clean_chinese_prompt_text(parsed.get("positive_prompt_chinese", ""))
+        negative_prompt_chinese = _clean_chinese_prompt_text(parsed.get("negative_prompt_chinese", ""))
 
         if base_positive_prompt.strip():
             positive_prompt = _clean_prompt_text(
@@ -411,7 +521,19 @@ class DeepSeekIllustriousPromptGenerator:
                 f"{base_negative_prompt.strip()}, {negative_prompt}" if negative_prompt else base_negative_prompt.strip()
             )
 
-        return (positive_prompt, negative_prompt, raw_response)
+        # 把最终实际使用的 max_tokens 回传给前端，便于 onExecuted 写回控件
+        return {
+            "ui": {
+                "max_tokens": [int(current_max_tokens)],
+            },
+            "result": (
+                positive_prompt,
+                positive_prompt_chinese,
+                negative_prompt,
+                negative_prompt_chinese,
+                raw_response,
+            ),
+        }
 
 
 class DualPromptCLIPEncode:
@@ -444,7 +566,9 @@ class IllustriousPromptResultViewer:
         return {
             "required": {
                 "positive_prompt": ("STRING", {"multiline": True, "forceInput": True}),
+                "positive_prompt_chinese": ("STRING", {"multiline": True, "forceInput": True}),
                 "negative_prompt": ("STRING", {"multiline": True, "forceInput": True}),
+                "negative_prompt_chinese": ("STRING", {"multiline": True, "forceInput": True}),
                 "raw_response": ("STRING", {"multiline": True, "forceInput": True}),
             }
         }
@@ -453,8 +577,14 @@ class IllustriousPromptResultViewer:
     def IS_CHANGED(cls, **kwargs):
         return float("nan")
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING")
-    RETURN_NAMES = ("positive_prompt", "negative_prompt", "raw_response")
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = (
+        "positive_prompt",
+        "positive_prompt_chinese",
+        "negative_prompt",
+        "negative_prompt_chinese",
+        "raw_response",
+    )
     FUNCTION = "show"
     CATEGORY = "DeepSeek/Illustrious"
     OUTPUT_NODE = True
@@ -462,14 +592,20 @@ class IllustriousPromptResultViewer:
     def show(
         self,
         positive_prompt: str,
+        positive_prompt_chinese: str,
         negative_prompt: str,
+        negative_prompt_chinese: str,
         raw_response: str,
     ):
         combined_preview = (
             "[Positive Prompt]\n"
             f"{positive_prompt or ''}\n\n"
+            "[Positive Prompt Chinese]\n"
+            f"{positive_prompt_chinese or ''}\n\n"
             "[Negative Prompt]\n"
             f"{negative_prompt or ''}\n\n"
+            "[Negative Prompt Chinese]\n"
+            f"{negative_prompt_chinese or ''}\n\n"
             "[Raw Response]\n"
             f"{raw_response or ''}"
         )
@@ -477,8 +613,15 @@ class IllustriousPromptResultViewer:
             "ui": {
                 "string": [combined_preview],
             },
-            "result": (positive_prompt or "", negative_prompt or "", raw_response or ""),
+            "result": (
+                positive_prompt or "",
+                positive_prompt_chinese or "",
+                negative_prompt or "",
+                negative_prompt_chinese or "",
+                raw_response or "",
+            ),
         }
+
 
 
 NODE_CLASS_MAPPINGS = {
