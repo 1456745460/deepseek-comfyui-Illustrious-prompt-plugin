@@ -66,7 +66,7 @@
   你的中文需求描述
 - `style_preset`
   当前配置中支持：
-  `illustrious-general`、`illustrious-anime`、`illustrious-portrait`、`illustrious-nsfw`
+  `illustrious-general`、`illustrious-anime`、`illustrious-portrait`、`illustrious-nsfw`、`illustrious-sweet`、`illustrious-photo`、`illustrious-poster`、`illustrious-chinese`、`illustrious-cyberpunk`、`illustrious-fantasy`、`illustrious-idol`、`illustrious-horror`
 - `json_retry_count`
   当模型返回内容无法解析为目标 JSON 时的自动重试次数，默认 `3`
 - `temperature`
@@ -163,6 +163,22 @@ illustrious-portrait =
     在这里填写 portrait 的 system prompt
 illustrious-nsfw =
     在这里填写 nsfw 的 system prompt
+illustrious-sweet =
+    在这里填写 sweet 的 system prompt
+illustrious-photo =
+    在这里填写 photo 的 system prompt
+illustrious-poster =
+    在这里填写 poster 的 system prompt
+illustrious-chinese =
+    在这里填写 chinese 的 system prompt
+illustrious-cyberpunk =
+    在这里填写 cyberpunk 的 system prompt
+illustrious-fantasy =
+    在这里填写 fantasy 的 system prompt
+illustrious-idol =
+    在这里填写 idol 的 system prompt
+illustrious-horror =
+    在这里填写 horror 的 system prompt
 ```
 
 字段说明：

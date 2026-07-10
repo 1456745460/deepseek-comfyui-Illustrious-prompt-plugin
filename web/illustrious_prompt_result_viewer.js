@@ -6,6 +6,14 @@ let systemPromptPresets = {
     "illustrious-anime": "",
     "illustrious-portrait": "",
     "illustrious-nsfw": "",
+    "illustrious-sweet": "",
+    "illustrious-photo": "",
+    "illustrious-poster": "",
+    "illustrious-chinese": "",
+    "illustrious-cyberpunk": "",
+    "illustrious-fantasy": "",
+    "illustrious-idol": "",
+    "illustrious-horror": "",
 };
 
 const loadSystemPromptPresets = async () => {
@@ -38,6 +46,14 @@ const VALID_STYLE_PRESETS = new Set([
     "illustrious-anime",
     "illustrious-portrait",
     "illustrious-nsfw",
+    "illustrious-sweet",
+    "illustrious-photo",
+    "illustrious-poster",
+    "illustrious-chinese",
+    "illustrious-cyberpunk",
+    "illustrious-fantasy",
+    "illustrious-idol",
+    "illustrious-horror",
 ]);
 
 const VALID_MODEL_NAMES = new Set(["deepseek-v4-flash", "deepseek-v4-pro", "custom"]);
