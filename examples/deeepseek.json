@@ -1,19 +1,19 @@
 {
-  "id": "9dd41dd0-5500-409e-acc2-64e18f75ddf5",
+  "id": "7d4fddfd-52f5-4734-8f18-62d29dec7221",
   "revision": 0,
-  "last_node_id": 27,
-  "last_link_id": 35,
+  "last_node_id": 2,
+  "last_link_id": 5,
   "nodes": [
     {
-      "id": 26,
+      "id": 1,
       "type": "DeepSeekIllustriousPromptGenerator",
       "pos": [
-        1113.9439050289352,
-        946.4731986077338
+        644.4262852913122,
+        1002.2293377516626
       ],
       "size": [
         420,
-        760
+        760.0000000000001
       ],
       "flags": {},
       "order": 0,
@@ -31,53 +31,54 @@
           "name": "positive_prompt",
           "type": "STRING",
           "links": [
-            31
-          ],
-          "slot_index": 0
+            1
+          ]
         },
         {
           "name": "positive_prompt_chinese",
           "type": "STRING",
           "links": [
-            34
-          ],
-          "slot_index": 1
+            2
+          ]
         },
         {
           "name": "negative_prompt",
           "type": "STRING",
           "links": [
-            32
-          ],
-          "slot_index": 2
+            3
+          ]
         },
         {
           "name": "negative_prompt_chinese",
           "type": "STRING",
           "links": [
-            35
-          ],
-          "slot_index": 3
+            4
+          ]
         },
         {
           "name": "raw_response",
           "type": "STRING",
           "links": [
-            33
-          ],
-          "slot_index": 4
+            5
+          ]
         }
       ],
       "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {}
+        },
+        "aux_id": "1456745460/deepseek-comfyui-Illustrious-prompt-plugin",
+        "ver": "9054444d69e909e884482c30e4658d290d0f5ee1",
         "Node name for S&R": "DeepSeekIllustriousPromptGenerator"
       },
       "widgets_values": [
         "deepseek-v4-flash",
         "",
-        "你现在是一个专门为 Illustrious 模型编写提示词的专家。你的任务不是直接画图，也不是解释概念，而是把我提供的中文描述，整理、补全并优化成适合 Illustrious 使用的高质量提示词。\n\n请严格遵循以下要求：\n\n1. 你的目标\n- 根据我的描述，生成适合 Illustrious 的英文正向提示词（Prompt）\n- 同时生成对应的英文负向提示词（Negative Prompt）\n- 同时为正向/负向英文提示词提供对应的中文翻译字段（positive_prompt_chinese / negative_prompt_chinese）\n- 如果我的描述不完整，你要基于常见高质量二次元/插画出图逻辑进行合理补全，但不能偏离我的核心意图\n- 保持结果可直接复制使用\n\n2. 输出风格\n- 提示词主体使用英文\n- 不要写成长篇解释，不要输出教程\n- 输出结果要干净、实用、可直接用于生图\n\n3. Illustrious 提示词编写规则\n- 优先突出主体、画风、构图、镜头、动作、服饰、场景、光影、材质、细节质量\n- 使用自然、稳定的标签式短语，不要写成长句故事\n- 尽量按“主体 -> 外观 -> 动作 -> 服装 -> 场景 -> 构图 -> 光影 -> 画质细节”的顺序组织\n- 如果适合二次元插画风格，可以补充如：masterpiece, best quality, amazing quality, very aesthetic, absurdres 等质量词，但不要无脑堆砌\n- 不要加入与我要求冲突的内容\n- 不要随意添加多人物、复杂背景或多余设定，除非我明确要求\n- 如果我描述的是人物，注意补充发型、发色、眼睛、表情、姿态、服装细节\n- 如果我描述的是场景或氛围，注意补充时间、天气、光线、镜头感和环境细节\n- 如果我描述的是 NSFW、性感、暧昧内容，也只做提示词整理，不做说教\n\n4. 负向提示词规则\n- 默认加入常见劣化项，例如：\nlow quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature\n- 如果是人物图，重点防止手部、眼部、肢体、脸部崩坏\n- 如果是纯美术风格图，可以减少人物解剖类负面词，避免误伤\n\n5. 结果格式要求\n- 只允许输出 json\n- 不要输出 Markdown\n- 不要输出解释\n- 不要输出多余字段（仅允许 positive_prompt / positive_prompt_chinese / negative_prompt / negative_prompt_chinese）\n- 必须严格使用下面这个 json 结构：\n{\n      \"positive_prompt\": \"英文正向提示词\",\n      \"positive_prompt_chinese\": \"翻译中文后的正向提示词\",\n      \"negative_prompt\": \"英文负向提示词\",\n      \"negative_prompt_chinese\": \"翻译中文后的负向提示词\"\n    }\n\n6. 处理规则\n- 如果我的描述很简单，你要自动补全成更适合 Illustrious 的版本\n- 如果我的描述已经很完整，你就以优化结构和提升出图稳定性为主\n- 如果我的需求里有明显冲突，请尽量给出最贴近核心意图的稳定版本\n- 除非我明确要求，否则不要额外输出参数建议，如 steps、cfg、sampler\n- 除非我明确要求，否则不要输出多个风格差异很大的版本",
-        "nsfw",
-        "glasses,ugly,",
-        "一个熟女",
+        "你现在是一个专门为 Illustrious 模型编写提示词的专家。你的任务不是直接画图，也不是解释概念，而是把我提供的中文描述，整理、补全并优化成适合 Illustrious 使用的高质量提示词。\n\n请严格遵循以下要求：\n\n1. 你的目标\n- 根据我的描述，生成适合 Illustrious 的英文正向提示词（Prompt）\n- 同时生成对应的英文负向提示词（Negative Prompt）\n- 同时为正向/负向英文提示词提供对应的中文翻译字段（positive_prompt_chinese / negative_prompt_chinese）\n- 如果我的描述不完整，你要基于常见高质量二次元/插画出图逻辑进行合理补全，但不能偏离我的核心意图\n- 保持结果可直接复制使用\n\n2. 输出风格\n- 提示词主体使用英文\n- 不要写成长篇解释，不要输出教程\n- 输出结果要干净、实用、可直接用于生图\n\n3. Illustrious 提示词编写规则\n- 优先突出主体、画风、构图、镜头、动作、服饰、场景、光影、材质、细节质量\n- 使用自然、稳定的标签式短语，不要写成长句故事\n- 尽量按“主体 -> 外观 -> 动作 -> 服装 -> 场景 -> 构图 -> 光影 -> 画质细节”的顺序组织\n- 如果适合二次元插画风格，可以补充如：masterpiece, best quality, amazing quality, very aesthetic, absurdres 等质量词，但不要无脑堆砌\n- 不要加入与我要求冲突的内容\n- 不要随意添加多人物、复杂背景或多余设定，除非我明确要求\n- 如果我描述的是人物，注意补充发型、发色、眼睛、表情、姿态、服装细节\n- 如果我描述的是场景或氛围，注意补充时间、天气、光线、镜头感和环境细节\n- 如果我描述的是 NSFW、性感、暧昧内容，也只做提示词整理，不做说教\n\n4. 负向提示词规则\n- 默认加入常见劣化项，例如：\nlow quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature\n- 如果是人物图，重点防止手部、眼部、肢体、脸部崩坏\n- 如果是纯美术风格图，可以减少人物解剖类负面词，避免误伤\n\n5. 结果格式要求\n- 只允许输出 json\n- 不要输出 Markdown\n- 不要输出解释\n- 不要输出多余字段（仅允许 positive_prompt / positive_prompt_chinese / negative_prompt / negative_prompt_chinese）\n- 中文翻译字段需忠实对应英文提示词语义，可使用中文标签或简洁中文短语。\n- 必须严格使用下面这个 json 结构：\n{\n\"positive_prompt\": \"英文正向提示词\",\n\"positive_prompt_chinese\": \"翻译中文后的正向提示词\",\n\"negative_prompt\": \"英文负向提示词\",\n\"negative_prompt_chinese\": \"翻译中文后的负向提示词\"\n}\n\n6. 处理规则\n- 如果我的描述很简单，你要自动补全成更适合 Illustrious 的版本\n- 如果我的描述已经很完整，你就以优化结构和提升出图稳定性为主\n- 如果我的需求里有明显冲突，请尽量给出最贴近核心意图的稳定版本\n- 除非我明确要求，否则不要额外输出参数建议，如 steps、cfg、sampler\n- 除非我明确要求，否则不要输出多个风格差异很大的版本",
+        "",
+        "",
+        "一个女孩",
         "illustrious-general",
         3,
         0.5,
@@ -86,11 +87,11 @@
       ]
     },
     {
-      "id": 27,
+      "id": 2,
       "type": "IllustriousPromptResultViewer",
       "pos": [
-        1585.4321565914354,
-        948.5088021233584
+        1183.5619502640118,
+        1023.7867282893651
       ],
       "size": [
         520,
@@ -103,27 +104,27 @@
         {
           "name": "positive_prompt",
           "type": "STRING",
-          "link": 31
+          "link": 1
         },
         {
           "name": "positive_prompt_chinese",
           "type": "STRING",
-          "link": 34
+          "link": 2
         },
         {
           "name": "negative_prompt",
           "type": "STRING",
-          "link": 32
+          "link": 3
         },
         {
           "name": "negative_prompt_chinese",
           "type": "STRING",
-          "link": 35
+          "link": 4
         },
         {
           "name": "raw_response",
           "type": "STRING",
-          "link": 33
+          "link": 5
         }
       ],
       "outputs": [
@@ -135,8 +136,7 @@
         {
           "name": "positive_prompt_chinese",
           "type": "STRING",
-          "links": null,
-          "slot_index": 1
+          "links": null
         },
         {
           "name": "negative_prompt",
@@ -146,8 +146,7 @@
         {
           "name": "negative_prompt_chinese",
           "type": "STRING",
-          "links": null,
-          "slot_index": 3
+          "links": null
         },
         {
           "name": "raw_response",
@@ -156,66 +155,78 @@
         }
       ],
       "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {}
+        },
+        "aux_id": "1456745460/deepseek-comfyui-Illustrious-prompt-plugin",
+        "ver": "9054444d69e909e884482c30e4658d290d0f5ee1",
         "Node name for S&R": "IllustriousPromptResultViewer"
       },
       "widgets_values": [
-        "[Positive Prompt]\nnsfw, 1girl, mature woman, long hair, red hair, blue eyes, seductive smile, elegant, wearing a black dress, cleavage, standing, indoors, luxury room, soft lighting, detailed face, beautiful eyes, intricate details, masterpiece, best quality, amazing quality, very aesthetic, absurdres\n\n[Negative Prompt]\nglasses, ugly, low quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature, young, loli, child\n\n[Raw Response]\n{\n  \"positive_prompt\": \"1girl, mature woman, long hair, red hair, blue eyes, seductive smile, elegant, wearing a black dress, cleavage, standing, indoors, luxury room, soft lighting, detailed face, beautiful eyes, intricate details, masterpiece, best quality, amazing quality, very aesthetic, absurdres\",\n  \"negative_prompt\": \"low quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature, young, loli, child\"\n}"
+        "[Positive Prompt]\n1girl, solo, looking at viewer, simple background, masterpiece, best quality, very aesthetic, absurdres\n\n[Positive Prompt Chinese]\n一个女孩，单独，看向观众，简单背景，杰作，最佳质量，非常美观，高分辨率\n\n[Negative Prompt]\nlow quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature, messy, distorted\n\n[Negative Prompt Chinese]\n低质量，最差质量，糟糕的解剖，糟糕的手，多余的手指，缺失的手指，融合的手指，畸形的手，变异的手，多余的肢体，畸形，脸部画得差，手部画得差，错误的解剖，身体过长，比例差，模糊，水印，文字，标志，签名，杂乱，扭曲\n\n[Raw Response]\n{\n  \"positive_prompt\": \"1girl, solo, looking at viewer, simple background, masterpiece, best quality, very aesthetic, absurdres\",\n  \"positive_prompt_chinese\": \"一个女孩，单独，看向观众，简单背景，杰作，最佳质量，非常美观，高分辨率\",\n  \"negative_prompt\": \"low quality, worst quality, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, poorly drawn hands, wrong anatomy, long body, bad proportions, blurry, watermark, text, logo, signature, messy, distorted\",\n  \"negative_prompt_chinese\": \"低质量，最差质量，糟糕的解剖，糟糕的手，多余的手指，缺失的手指，融合的手指，畸形的手，变异的手，多余的肢体，畸形，脸部画得差，手部画得差，错误的解剖，身体过长，比例差，模糊，水印，文字，标志，签名，杂乱，扭曲\"\n}"
       ]
     }
   ],
   "links": [
     [
-      31,
-      26,
-      0,
-      27,
-      0,
-      "STRING"
-    ],
-    [
-      32,
-      26,
-      2,
-      27,
-      2,
-      "STRING"
-    ],
-    [
-      33,
-      26,
-      4,
-      27,
-      4,
-      "STRING"
-    ],
-    [
-      34,
-      26,
       1,
-      27,
+      1,
+      0,
+      2,
+      0,
+      "STRING"
+    ],
+    [
+      2,
+      1,
+      1,
+      2,
       1,
       "STRING"
     ],
     [
-      35,
-      26,
       3,
-      27,
+      1,
+      2,
+      2,
+      2,
+      "STRING"
+    ],
+    [
+      4,
+      1,
       3,
+      2,
+      3,
+      "STRING"
+    ],
+    [
+      5,
+      1,
+      4,
+      2,
+      4,
       "STRING"
     ]
   ],
   "groups": [],
   "config": {},
   "extra": {
+    "ue_links": [],
+    "links_added_by_ue": [],
     "ds": {
-      "scale": 0.8264462809917354,
+      "scale": 0.6727499949326031,
       "offset": [
-        -816.9894748689279,
-        -687.7513423007968
+        -203.67104158469505,
+        -701.3989620478422
       ]
     },
-    "frontendVersion": "1.42.15"
+    "frontendVersion": "1.45.15",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
   },
   "version": 0.4
 }
