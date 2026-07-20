@@ -28,6 +28,7 @@ STYLE_PRESET_KEYS = [
     "illustrious-fantasy",
     "illustrious-idol",
     "illustrious-horror",
+    "illustrious-photobook",
 ]
 
 DEFAULT_SYSTEM_PROMPT = ""
@@ -377,7 +378,7 @@ class DeepSeekIllustriousPromptGenerator:
                     {"default": default_preset},
                 ),
                 "json_retry_count": ("INT", {"default": 3, "min": 0, "max": 10, "step": 1}),
-                "temperature": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.5, "step": 0.05}),
+                "temperature": ("FLOAT", {"default": 0.2, "min": 0.0, "max": 1.5, "step": 0.05}),
                 "max_tokens": ("INT", {"default": 2000, "min": 128, "max": 8192, "step": 1}),
             },
             "optional": {

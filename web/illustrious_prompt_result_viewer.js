@@ -31,12 +31,35 @@ const loadSystemPromptPresets = async () => {
 };
 
 const DEEPSEEK_PROMPT_NODE_MIN_SIZE = [420, 760];
+
+// 各控件在 LiteGraph canvas 中分配的高度（像素），通过覆写 computeSize 生效
+const WIDGET_CANVAS_HEIGHT = {
+    base_positive_prompt: 46,   // 约两行
+    base_negative_prompt: 46,   // 约两行
+    system_prompt:        280,  // 大面积
+    description:          130,  // 需求描述
+};
+
+const applyPromptWidgetHeights = (node) => {
+    if (!node.widgets) return;
+    for (const widget of node.widgets) {
+        const fixedH = WIDGET_CANVAS_HEIGHT[widget.name];
+        if (fixedH == null) continue;
+        // 覆写 computeSize，让 LiteGraph 按此高度分配 canvas 空间
+        widget.computeSize = function (width) {
+            return [width, fixedH];
+        };
+    }
+    // 通知 LiteGraph 重新计算布局
+    node.setSize?.(node.computeSize?.() || node.size);
+    node.setDirtyCanvas?.(true, true);
+};
 const RESULT_VIEWER_NODE_MIN_SIZE = [520, 720];
 const DEEPSEEK_DEFAULTS = {
     model_name: "deepseek-v4-flash",
     style_preset: "illustrious-general",
     json_retry_count: 3,
-    temperature: 0.5,
+    temperature: 0.2,
     max_tokens: 2000,
     base_url: "https://api.deepseek.com/v1",
 };
@@ -144,6 +167,7 @@ app.registerExtension({
                     Math.max(computedSize[1] || 0, DEEPSEEK_PROMPT_NODE_MIN_SIZE[1]),
                 ]);
                 sanitizeNodeWidgets(this);
+                applyPromptWidgetHeights(this);
                 const styleWidget = getWidget(this, "style_preset");
                 const systemWidget = getWidget(this, "system_prompt");
                 if (styleWidget && systemWidget && !systemWidget.value) {
@@ -200,6 +224,7 @@ app.registerExtension({
                     Math.max(currentSize[1] || 0, DEEPSEEK_PROMPT_NODE_MIN_SIZE[1]),
                 ]);
                 sanitizeNodeWidgets(this);
+                applyPromptWidgetHeights(this);
                 const styleWidget = getWidget(this, "style_preset");
                 if (styleWidget) {
                     applyPresetToNode(this, styleWidget.value, true);
