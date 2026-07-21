@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
-NODE_VERSION = "v1.5"
+NODE_VERSION = "v1.6"
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = PLUGIN_ROOT / "config"
 CONFIG_PATH = CONFIG_DIR / "deepseek_config.ini"
@@ -115,6 +115,129 @@ def _dedupe_tokens(text: str) -> str:
     return ", ".join(result)
 
 
+# 禁止乱加权重的通用词（子串匹配，小写）
+_WEIGHT_DENY_SUBSTRINGS = (
+    "masterpiece", "best quality", "amazing quality", "very aesthetic",
+    "absurdres", "ultra-detailed", "ultra detailed", "highres", "high res",
+    "lowres", "newest", "high quality", "normal quality", "worst quality",
+    "detailed", "intricate", "beautiful", "aesthetic", "exquisite",
+    "lighting", "rim light", "backlight", "sidelight", "soft light",
+    "cinematic", "dramatic", "atmosphere", "moody", "ambient",
+    "bokeh", "depth of field", "depth-of-field", "blur", "defocus",
+    "background", "composition", "from above", "from below", "from side",
+    "looking at viewer", "upper body", "close-up", "close up", "full body",
+    "cowboy shot", "portrait", "wide angle", "dutch angle",
+    "anime style", "illustration", "photorealistic", "realistic", "photo",
+    "film grain", "hdr", "8k", "4k", "wallpaper", "official art",
+    "game cg", "cel shading", "soft shading", "lineart",
+    "volumetric", "particle", "sparkle", "glitter", "glow",
+    "fog", "mist", "rain", "snow", "smoke", "dust",
+    "colorful", "vivid", "saturation", "contrast",
+    "1girl", "2girls", "3girls", "1boy", "2boys", "solo",
+    "multiple girls", "multiple boys", "sharp focus", "highly detailed",
+    "absurd res", "ultra-detailed eyes", "beautiful detailed",
+    "perfect face", "perfect body", "detailed eyes", "detailed face",
+    "soft focus", "studio lighting", "natural lighting", "neon light",
+    "lens flare", "chromatic", "anisotropic", "ray tracing",
+)
+
+_MAX_ATTENTION_WEIGHTS = 3
+_MIN_KEEP_WEIGHT = 1.10
+_MAX_KEEP_WEIGHT = 1.30
+
+
+def _is_weight_denied(content: str) -> bool:
+    low = content.lower().strip()
+    if not low:
+        return True
+    if any(denylist in low for denylist in _WEIGHT_DENY_SUBSTRINGS):
+        return True
+    # 过长短语 / 多概念串不适合加权
+    if len(low) > 36 or len(low.split()) > 4:
+        return True
+    if "," in low or "/" in low or "|" in low:
+        return True
+    return False
+
+
+def _snap_weight(value: float) -> float:
+    """把权重收敛到克制的离散档位。"""
+    if value < 1.175:
+        return 1.15
+    if value < 1.225:
+        return 1.2
+    if value < 1.275:
+        return 1.25
+    return 1.3
+
+
+def _format_weight(value: float) -> str:
+    text = f"{value:.2f}".rstrip("0").rstrip(".")
+    return text
+
+
+def _normalize_attention_weights(text: str, max_weights: int = _MAX_ATTENTION_WEIGHTS) -> str:
+    """
+    强制收敛括号权重：
+    - 去掉无数值括号、多层括号
+    - 禁止给质量/光影/氛围等通用词加权
+    - 权重钳制到 1.15–1.3
+    - 整段最多保留 max_weights 处权重
+    """
+    if not text:
+        return ""
+
+    # 匹配一层或多层括号/方括号 attention；支持嵌在短语中间
+    pattern = re.compile(
+        r"([(\[]+)\s*([^()\[\]:]+?)\s*(?::\s*(-?\d+(?:\.\d+)?))?\s*([)\]]+)"
+    )
+
+    matches = list(pattern.finditer(text))
+    if not matches:
+        return text
+
+    candidates = []
+    for idx, match in enumerate(matches):
+        content = re.sub(r"\s+", " ", match.group(2)).strip(" ,")
+        raw_weight = match.group(3)
+        weight_val = None
+        if raw_weight is not None:
+            try:
+                weight_val = float(raw_weight)
+            except ValueError:
+                weight_val = None
+
+        keep_weight = None
+        if weight_val is not None and weight_val > 0 and not _is_weight_denied(content):
+            if weight_val >= _MIN_KEEP_WEIGHT:
+                clamped = min(max(weight_val, _MIN_KEEP_WEIGHT), _MAX_KEEP_WEIGHT)
+                keep_weight = _snap_weight(clamped)
+                candidates.append((idx, content, keep_weight, len(content)))
+
+    keep_map = {}
+    if candidates:
+        ranked = sorted(candidates, key=lambda item: (-item[2], item[3], item[0]))
+        for item in ranked[: max(0, int(max_weights))]:
+            keep_map[item[0]] = item[2]
+
+    parts = []
+    last = 0
+    for idx, match in enumerate(matches):
+        parts.append(text[last:match.start()])
+        content = re.sub(r"\s+", " ", match.group(2)).strip(" ,")
+        if idx in keep_map:
+            parts.append(f"({content}:{_format_weight(keep_map[idx])})")
+        else:
+            parts.append(content)
+        last = match.end()
+    parts.append(text[last:])
+    normalized = "".join(parts)
+    normalized = re.sub(r"\s{2,}", " ", normalized)
+    normalized = re.sub(r"\s*,\s*", ", ", normalized)
+    normalized = re.sub(r"(?:,\s*){2,}", ", ", normalized)
+    return normalized.strip(" ,")
+
+
 def _clean_prompt_text(text: str) -> str:
     if not text:
         return ""
@@ -130,11 +253,13 @@ def _clean_prompt_text(text: str) -> str:
     )
     cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" ,")
     cleaned = _dedupe_tokens(cleaned)
+    cleaned = _normalize_attention_weights(cleaned)
+    cleaned = _dedupe_tokens(cleaned)
     return cleaned.strip(" ,")
 
 
 def _clean_chinese_prompt_text(text: str) -> str:
-    """中文提示词清洗：保留中文语义，仅做基础整理。"""
+    """中文提示词清洗：保留中文语义，仅做基础整理；强制去掉括号权重。"""
     if not text:
         return ""
 
@@ -147,6 +272,9 @@ def _clean_chinese_prompt_text(text: str) -> str:
     )
     cleaned = re.sub(r"\s*\n+\s*", "，", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"[，,]{2,}", "，", cleaned)
+    # 中文字段禁止保留权重
+    cleaned = re.sub(r"[（(]([^（）()]*?)(?:\s*[:：]\s*-?\d+(?:\.\d+)?)?[）)]", r"\1", cleaned)
     cleaned = re.sub(r"[，,]{2,}", "，", cleaned)
     return cleaned.strip(" ，,")
 
@@ -318,8 +446,18 @@ def _build_user_prompt(
         "positive_prompt, positive_prompt_chinese.\n"
         f"Style preset: {style_preset}\n"
         f"User description: {description.strip()}\n"
-        "Keep the English positive prompt tag-like, concise, visually rich, and suitable for direct image generation.\n"
-        "Chinese field should be a faithful translation of the English prompt."
+        "English positive prompt rules:\n"
+        "- Use concise Danbooru-like English tags/phrases, not long story sentences.\n"
+        "- Prefer concrete visual details over vague adjectives.\n"
+        "- Order by importance: quality -> subject identity -> appearance -> pose -> clothing -> scene -> camera -> lighting -> mood.\n"
+        "- Attention weight rules (mandatory):\n"
+        "  * Default NO weights. Prefer 0 weighted tags.\n"
+        "  * At most 0-3 weighted tags in the whole positive_prompt.\n"
+        "  * Only short core-identity tags may be weighted, e.g. user-specified hair/eyes/race/signature prop.\n"
+        "  * Allowed form only: (tag:1.15) / (tag:1.2) / (tag:1.25); hard cap 1.3.\n"
+        "  * Never weight quality, style, lighting, atmosphere, camera, background, particles, or generic detail words.\n"
+        "  * Never use bare (tag), nested ((tag)), (((tag))), or weights >= 1.4.\n"
+        "- Chinese field: faithful translation, no attention weights."
     )
 
 
