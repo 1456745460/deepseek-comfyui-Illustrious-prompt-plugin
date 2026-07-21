@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
-NODE_VERSION = "v1.2"
+NODE_VERSION = "v1.5"
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = PLUGIN_ROOT / "config"
 CONFIG_PATH = CONFIG_DIR / "deepseek_config.ini"
@@ -89,15 +89,11 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
             return ""
 
         positive_prompt = extract_field("positive_prompt")
-        negative_prompt = extract_field("negative_prompt")
         positive_prompt_chinese = extract_field("positive_prompt_chinese")
-        negative_prompt_chinese = extract_field("negative_prompt_chinese")
-        if positive_prompt or negative_prompt or positive_prompt_chinese or negative_prompt_chinese:
+        if positive_prompt or positive_prompt_chinese:
             return {
                 "positive_prompt": positive_prompt,
-                "negative_prompt": negative_prompt,
                 "positive_prompt_chinese": positive_prompt_chinese,
-                "negative_prompt_chinese": negative_prompt_chinese,
             }
 
         raise ValueError(f"模型返回中未找到合法 JSON 或可提取字段。原始返回: {cleaned[:500]}")
@@ -127,7 +123,7 @@ def _clean_prompt_text(text: str) -> str:
     cleaned = cleaned.replace("，", ", ").replace("；", ", ").replace("：", ": ")
     cleaned = re.sub(r"\s*\n+\s*", ", ", cleaned)
     cleaned = re.sub(
-        r"^(positive_prompt(?:_chinese)?|negative_prompt(?:_chinese)?|prompt)\s*:\s*",
+        r"^(positive_prompt(?:_chinese)?|prompt)\s*:\s*",
         "",
         cleaned,
         flags=re.IGNORECASE,
@@ -144,7 +140,7 @@ def _clean_chinese_prompt_text(text: str) -> str:
 
     cleaned = _strip_think_blocks(text)
     cleaned = re.sub(
-        r"^(positive_prompt(?:_chinese)?|negative_prompt(?:_chinese)?|prompt)\s*[:：]\s*",
+        r"^(positive_prompt(?:_chinese)?|prompt)\s*[:：]\s*",
         "",
         cleaned,
         flags=re.IGNORECASE,
@@ -200,8 +196,7 @@ def _is_response_incomplete(choice: Dict[str, Any], raw_response: str) -> bool:
 
 def _has_usable_prompt_fields(parsed: Dict[str, Any]) -> bool:
     positive = str(parsed.get("positive_prompt", "") or "").strip()
-    negative = str(parsed.get("negative_prompt", "") or "").strip()
-    return bool(positive or negative)
+    return bool(positive)
 
 
 def _normalize_file_config(raw: Dict[str, Any], source_path: Path) -> Dict[str, Any]:
@@ -317,14 +312,14 @@ def _build_user_prompt(
     style_preset: str,
 ) -> str:
     return (
-        "Generate an Illustrious-ready positive prompt and negative prompt.\n"
-        "Also provide Chinese translations for both prompts.\n"
+        "Generate an Illustrious-ready positive prompt.\n"
+        "Also provide a Chinese translation for the positive prompt.\n"
         "Return valid json only with keys: "
-        "positive_prompt, positive_prompt_chinese, negative_prompt, negative_prompt_chinese.\n"
+        "positive_prompt, positive_prompt_chinese.\n"
         f"Style preset: {style_preset}\n"
         f"User description: {description.strip()}\n"
         "Keep the English positive prompt tag-like, concise, visually rich, and suitable for direct image generation.\n"
-        "Chinese fields should be faithful translations of the English prompts."
+        "Chinese field should be a faithful translation of the English prompt."
     )
 
 
@@ -366,10 +361,10 @@ class DeepSeekIllustriousPromptGenerator:
                 "base_negative_prompt": (
                     "STRING",
                     {
-                        "default": "",
+                        "default": "lowres, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, wrong anatomy, bad proportions, blurry, watermark, text, logo, signature, worst quality, low quality, normal quality, monochrome, grayscale, cinematic lighting, film grain, dramatic shadows, movie style, hdr, high contrast, cinematic composition, color grading, lens flare, depth of field, bokeh, anamorphic, wide angle, dutch angle, intricate background, complex background",
                         "multiline": True,
                         "label": "Base Negative Prompt",
-                        "placeholder": "这里填写强制追加到负向提示词里的基础条件",
+                        "placeholder": "这里填写强制使用的负面提示词（不由 AI 生成，直接输出）",
                     },
                 ),
                 "description": ("STRING", {"default": "", "multiline": True, "placeholder": "输入你的中文需求描述"}),
@@ -391,12 +386,11 @@ class DeepSeekIllustriousPromptGenerator:
     def IS_CHANGED(cls, **kwargs):
         return math.nan
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", "STRING")
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING")
     RETURN_NAMES = (
         "positive_prompt",
         "positive_prompt_chinese",
         "negative_prompt",
-        "negative_prompt_chinese",
         "raw_response",
     )
     FUNCTION = "generate"
@@ -488,7 +482,7 @@ class DeepSeekIllustriousPromptGenerator:
             try:
                 candidate = _extract_json_object(raw_response)
                 if not _has_usable_prompt_fields(candidate):
-                    raise ValueError("模型返回 JSON 中未提取到可用的 positive_prompt / negative_prompt")
+                    raise ValueError("模型返回 JSON 中未提取到可用的 positive_prompt")
                 parsed = candidate
                 break
             except ValueError as exc:
@@ -508,18 +502,12 @@ class DeepSeekIllustriousPromptGenerator:
             )
 
         positive_prompt = _clean_prompt_text(parsed.get("positive_prompt", ""))
-        negative_prompt = _clean_prompt_text(parsed.get("negative_prompt", ""))
         positive_prompt_chinese = _clean_chinese_prompt_text(parsed.get("positive_prompt_chinese", ""))
-        negative_prompt_chinese = _clean_chinese_prompt_text(parsed.get("negative_prompt_chinese", ""))
+        negative_prompt = base_negative_prompt.strip()
 
         if base_positive_prompt.strip():
             positive_prompt = _clean_prompt_text(
                 f"{base_positive_prompt.strip()}, {positive_prompt}" if positive_prompt else base_positive_prompt.strip()
-            )
-
-        if base_negative_prompt.strip():
-            negative_prompt = _clean_prompt_text(
-                f"{base_negative_prompt.strip()}, {negative_prompt}" if negative_prompt else base_negative_prompt.strip()
             )
 
         # 把最终实际使用的 max_tokens 回传给前端，便于 onExecuted 写回控件
@@ -531,7 +519,6 @@ class DeepSeekIllustriousPromptGenerator:
                 positive_prompt,
                 positive_prompt_chinese,
                 negative_prompt,
-                negative_prompt_chinese,
                 raw_response,
             ),
         }
@@ -569,7 +556,6 @@ class IllustriousPromptResultViewer:
                 "positive_prompt": ("STRING", {"multiline": True, "forceInput": True}),
                 "positive_prompt_chinese": ("STRING", {"multiline": True, "forceInput": True}),
                 "negative_prompt": ("STRING", {"multiline": True, "forceInput": True}),
-                "negative_prompt_chinese": ("STRING", {"multiline": True, "forceInput": True}),
                 "raw_response": ("STRING", {"multiline": True, "forceInput": True}),
             }
         }
@@ -578,12 +564,11 @@ class IllustriousPromptResultViewer:
     def IS_CHANGED(cls, **kwargs):
         return float("nan")
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", "STRING")
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING")
     RETURN_NAMES = (
         "positive_prompt",
         "positive_prompt_chinese",
         "negative_prompt",
-        "negative_prompt_chinese",
         "raw_response",
     )
     FUNCTION = "show"
@@ -595,7 +580,6 @@ class IllustriousPromptResultViewer:
         positive_prompt: str,
         positive_prompt_chinese: str,
         negative_prompt: str,
-        negative_prompt_chinese: str,
         raw_response: str,
     ):
         combined_preview = (
@@ -605,8 +589,6 @@ class IllustriousPromptResultViewer:
             f"{positive_prompt_chinese or ''}\n\n"
             "[Negative Prompt]\n"
             f"{negative_prompt or ''}\n\n"
-            "[Negative Prompt Chinese]\n"
-            f"{negative_prompt_chinese or ''}\n\n"
             "[Raw Response]\n"
             f"{raw_response or ''}"
         )
@@ -618,7 +600,6 @@ class IllustriousPromptResultViewer:
                 positive_prompt or "",
                 positive_prompt_chinese or "",
                 negative_prompt or "",
-                negative_prompt_chinese or "",
                 raw_response or "",
             ),
         }
