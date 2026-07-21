@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
-NODE_VERSION = "v1.6"
+NODE_VERSION = "v1.8"
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = PLUGIN_ROOT / "config"
 CONFIG_PATH = CONFIG_DIR / "deepseek_config.ini"
@@ -512,7 +512,23 @@ class DeepSeekIllustriousPromptGenerator:
                 ),
                 "json_retry_count": ("INT", {"default": 3, "min": 0, "max": 10, "step": 1}),
                 "temperature": ("FLOAT", {"default": 0.2, "min": 0.0, "max": 1.5, "step": 0.05}),
-                "max_tokens": ("INT", {"default": 2000, "min": 128, "max": 8192, "step": 1}),
+                # 思考模式（thinking）会额外占用输出 token，默认提高到 8192，减少 content 被截断
+                "max_tokens": ("INT", {"default": 8192, "min": 128, "max": 8192, "step": 1}),
+                "enable_thinking": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "label": "Enable Thinking",
+                        "tooltip": "开启 DeepSeek 思考模式（thinking），对应 extra_body.thinking.type=enabled",
+                    },
+                ),
+                "reasoning_effort": (
+                    ["high", "medium", "low"],
+                    {
+                        "default": "high",
+                        "tooltip": "思考强度 reasoning_effort（仅 enable_thinking 开启时生效）",
+                    },
+                ),
             },
             "optional": {
                 "base_url": ("STRING", {"default": DEFAULT_BASE_URL, "multiline": False}),
@@ -546,6 +562,8 @@ class DeepSeekIllustriousPromptGenerator:
         json_retry_count: int,
         temperature: float,
         max_tokens: int,
+        enable_thinking: bool = True,
+        reasoning_effort: str = "high",
         base_url: str = DEFAULT_BASE_URL,
         llm_config: Optional[Dict[str, Any]] = None,
     ):
@@ -579,6 +597,17 @@ class DeepSeekIllustriousPromptGenerator:
             "response_format": {"type": "json_object"},
         }
 
+        # DeepSeek 思考模式：thinking.type=enabled + reasoning_effort
+        thinking_enabled = bool(enable_thinking)
+        if thinking_enabled:
+            effort = str(reasoning_effort or "high").strip().lower()
+            if effort not in {"high", "medium", "low"}:
+                effort = "high"
+            payload["thinking"] = {"type": "enabled"}
+            payload["reasoning_effort"] = effort
+        else:
+            payload["thinking"] = {"type": "disabled"}
+
         retry_count = max(0, int(json_retry_count if json_retry_count is not None else get_json_retry_count()))
         current_max_tokens = max(128, int(max_tokens or 128))
         token_cap = max(current_max_tokens, AUTO_MAX_TOKENS_CAP)
@@ -586,6 +615,7 @@ class DeepSeekIllustriousPromptGenerator:
 
         last_parse_error = None
         raw_response = ""
+        reasoning_content = ""
         parsed = None
         parse_failures = 0
         token_boosts = 0
@@ -606,7 +636,16 @@ class DeepSeekIllustriousPromptGenerator:
                 raise RuntimeError(f"模型未返回 choices: {json.dumps(data, ensure_ascii=False)[:500]}")
 
             choice = choices[0] if isinstance(choices[0], dict) else {}
-            raw_response = choice.get("message", {}).get("content", "") if isinstance(choice, dict) else ""
+            message = choice.get("message", {}) if isinstance(choice, dict) else {}
+            if not isinstance(message, dict):
+                message = {}
+            # 思考模式：最终答案在 content，推理过程在 reasoning_content（API 多轮时会忽略后者）
+            raw_response = str(message.get("content", "") or "")
+            reasoning_content = str(
+                message.get("reasoning_content")
+                or message.get("reasoning")
+                or ""
+            )
             incomplete = _is_response_incomplete(choice, raw_response)
 
             # 只要判定输出被截断，就优先自动提高 max_tokens 再重试
@@ -646,6 +685,13 @@ class DeepSeekIllustriousPromptGenerator:
         if base_positive_prompt.strip():
             positive_prompt = _clean_prompt_text(
                 f"{base_positive_prompt.strip()}, {positive_prompt}" if positive_prompt else base_positive_prompt.strip()
+            )
+
+        # raw_response 优先输出最终 content；若有思考过程则一并附上，便于排查
+        if reasoning_content.strip():
+            raw_response = (
+                f"[reasoning_content]\n{reasoning_content.strip()}\n\n"
+                f"[content]\n{raw_response}"
             )
 
         # 把最终实际使用的 max_tokens 回传给前端，便于 onExecuted 写回控件
@@ -755,3 +801,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "DualPromptCLIPEncode": "Dual Prompt CLIP Encode",
     "IllustriousPromptResultViewer": "Illustrious Prompt Result Viewer",
 }
+               
