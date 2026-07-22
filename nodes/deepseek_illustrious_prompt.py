@@ -33,6 +33,21 @@ STYLE_PRESET_KEYS = [
 
 DEFAULT_SYSTEM_PROMPT = ""
 
+# 固定质量/画风词前缀，始终前置于正向提示词
+FIXED_QUALITY_PREFIX = (
+    "masterpiece, best quality, high quality, absurdres, "
+    "semi-realistic anime style, soft digital painting, "
+    "painterly rendering, smooth shading, smooth gradients, "
+    "soft matte finish, velvety skin texture, "
+    "soft satin-like highlights, low micro-contrast, "
+    "clean rendering, polished illustration, "
+    "soft diffused lighting, warm cinematic lighting, "
+    "subtle rim light, gentle ambient occlusion, "
+    "subtle atmospheric haze, restrained soft bloom, "
+    "muted warm color palette, creamy beige tones, "
+    "delicate fine film grain, clean composition"
+)
+
 
 def _post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int = 180) -> Dict[str, Any]:
     data = json.dumps(payload).encode("utf-8")
@@ -115,122 +130,56 @@ def _dedupe_tokens(text: str) -> str:
     return ", ".join(result)
 
 
-# 禁止乱加权重的通用词（子串匹配，小写）
-_WEIGHT_DENY_SUBSTRINGS = (
-    "masterpiece", "best quality", "amazing quality", "very aesthetic",
-    "absurdres", "ultra-detailed", "ultra detailed", "highres", "high res",
-    "lowres", "newest", "high quality", "normal quality", "worst quality",
-    "detailed", "intricate", "beautiful", "aesthetic", "exquisite",
-    "lighting", "rim light", "backlight", "sidelight", "soft light",
-    "cinematic", "dramatic", "atmosphere", "moody", "ambient",
-    "bokeh", "depth of field", "depth-of-field", "blur", "defocus",
-    "background", "composition", "from above", "from below", "from side",
-    "looking at viewer", "upper body", "close-up", "close up", "full body",
-    "cowboy shot", "portrait", "wide angle", "dutch angle",
-    "anime style", "illustration", "photorealistic", "realistic", "photo",
-    "film grain", "hdr", "8k", "4k", "wallpaper", "official art",
-    "game cg", "cel shading", "soft shading", "lineart",
-    "volumetric", "particle", "sparkle", "glitter", "glow",
-    "fog", "mist", "rain", "snow", "smoke", "dust",
-    "colorful", "vivid", "saturation", "contrast",
-    "1girl", "2girls", "3girls", "1boy", "2boys", "solo",
-    "multiple girls", "multiple boys", "sharp focus", "highly detailed",
-    "absurd res", "ultra-detailed eyes", "beautiful detailed",
-    "perfect face", "perfect body", "detailed eyes", "detailed face",
-    "soft focus", "studio lighting", "natural lighting", "neon light",
-    "lens flare", "chromatic", "anisotropic", "ray tracing",
-)
-
-_MAX_ATTENTION_WEIGHTS = 3
-_MIN_KEEP_WEIGHT = 1.10
-_MAX_KEEP_WEIGHT = 1.30
-
-
-def _is_weight_denied(content: str) -> bool:
-    low = content.lower().strip()
-    if not low:
-        return True
-    if any(denylist in low for denylist in _WEIGHT_DENY_SUBSTRINGS):
-        return True
-    # 过长短语 / 多概念串不适合加权
-    if len(low) > 36 or len(low.split()) > 4:
-        return True
-    if "," in low or "/" in low or "|" in low:
-        return True
-    return False
-
-
-def _snap_weight(value: float) -> float:
-    """把权重收敛到克制的离散档位。"""
-    if value < 1.175:
-        return 1.15
-    if value < 1.225:
-        return 1.2
-    if value < 1.275:
-        return 1.25
-    return 1.3
-
-
 def _format_weight(value: float) -> str:
     text = f"{value:.2f}".rstrip("0").rstrip(".")
     return text
 
 
-def _normalize_attention_weights(text: str, max_weights: int = _MAX_ATTENTION_WEIGHTS) -> str:
+def _normalize_attention_weights(text: str) -> str:
     """
-    强制收敛括号权重：
-    - 去掉无数值括号、多层括号
-    - 禁止给质量/光影/氛围等通用词加权
-    - 权重钳制到 1.15–1.3
-    - 整段最多保留 max_weights 处权重
+    宽松权重清理：
+    - 保留用户（或 AI 按照用户权重翻译出来的）合法格式 (tag:数值)，数值范围 0.1–1.99
+    - 去掉无数值括号 (tag)、多层嵌套括号 ((tag)) / (((tag)))
+    - 不做词汇黑名单过滤，完全尊重 AI 忠实透传的用户权重
     """
     if not text:
         return ""
 
-    # 匹配一层或多层括号/方括号 attention；支持嵌在短语中间
+    # 先展开多层括号嵌套：((tag)) → (tag)，(((tag:1.5))) → (tag:1.5)
+    # 反复去掉多余的外层括号，直到稳定
+    prev = None
+    while prev != text:
+        prev = text
+        text = re.sub(r"\(\s*\(([^()]*)\)\s*\)", r"(\1)", text)
+
+    # 匹配括号注意力块：(content) 或 (content:weight)
     pattern = re.compile(
-        r"([(\[]+)\s*([^()\[\]:]+?)\s*(?::\s*(-?\d+(?:\.\d+)?))?\s*([)\]]+)"
+        r"\(\s*([^()\[\]:,]+?)\s*(?::\s*(-?\d+(?:\.\d+)?))?\s*\)"
     )
-
-    matches = list(pattern.finditer(text))
-    if not matches:
-        return text
-
-    candidates = []
-    for idx, match in enumerate(matches):
-        content = re.sub(r"\s+", " ", match.group(2)).strip(" ,")
-        raw_weight = match.group(3)
-        weight_val = None
-        if raw_weight is not None:
-            try:
-                weight_val = float(raw_weight)
-            except ValueError:
-                weight_val = None
-
-        keep_weight = None
-        if weight_val is not None and weight_val > 0 and not _is_weight_denied(content):
-            if weight_val >= _MIN_KEEP_WEIGHT:
-                clamped = min(max(weight_val, _MIN_KEEP_WEIGHT), _MAX_KEEP_WEIGHT)
-                keep_weight = _snap_weight(clamped)
-                candidates.append((idx, content, keep_weight, len(content)))
-
-    keep_map = {}
-    if candidates:
-        ranked = sorted(candidates, key=lambda item: (-item[2], item[3], item[0]))
-        for item in ranked[: max(0, int(max_weights))]:
-            keep_map[item[0]] = item[2]
 
     parts = []
     last = 0
-    for idx, match in enumerate(matches):
+    for match in pattern.finditer(text):
         parts.append(text[last:match.start()])
-        content = re.sub(r"\s+", " ", match.group(2)).strip(" ,")
-        if idx in keep_map:
-            parts.append(f"({content}:{_format_weight(keep_map[idx])})")
+        content = re.sub(r"\s+", " ", match.group(1)).strip(" ,")
+        raw_weight = match.group(2)
+
+        if raw_weight is not None:
+            try:
+                weight_val = float(raw_weight)
+                # 保留有效权重（0.1–1.99），丢弃异常值
+                if 0.1 <= weight_val < 2.0:
+                    parts.append(f"({content}:{_format_weight(weight_val)})")
+                else:
+                    parts.append(content)
+            except ValueError:
+                parts.append(content)
         else:
+            # 无数值括号 (tag) → 直接展开为 tag
             parts.append(content)
         last = match.end()
     parts.append(text[last:])
+
     normalized = "".join(parts)
     normalized = re.sub(r"\s{2,}", " ", normalized)
     normalized = re.sub(r"\s*,\s*", ", ", normalized)
@@ -449,15 +398,15 @@ def _build_user_prompt(
         "English positive prompt rules:\n"
         "- Use concise Danbooru-like English tags/phrases, not long story sentences.\n"
         "- Prefer concrete visual details over vague adjectives.\n"
-        "- Order by importance: quality -> subject identity -> appearance -> pose -> clothing -> scene -> camera -> lighting -> mood.\n"
-        "- Attention weight rules (mandatory):\n"
-        "  * Default NO weights. Prefer 0 weighted tags.\n"
-        "  * At most 0-3 weighted tags in the whole positive_prompt.\n"
-        "  * Only short core-identity tags may be weighted, e.g. user-specified hair/eyes/race/signature prop.\n"
-        "  * Allowed form only: (tag:1.15) / (tag:1.2) / (tag:1.25); hard cap 1.3.\n"
-        "  * Never weight quality, style, lighting, atmosphere, camera, background, particles, or generic detail words.\n"
-        "  * Never use bare (tag), nested ((tag)), (((tag))), or weights >= 1.4.\n"
-        "- Chinese field: faithful translation, no attention weights."
+        "- Order: subject identity -> appearance -> pose -> clothing -> scene -> camera -> lighting -> mood.\n"
+        "- DO NOT add quality words or style words (e.g. masterpiece, best quality, anime style). They are prepended by the system.\n"
+        "- Attention weight rules (HIGHEST PRIORITY, strictly enforced):\n"
+        "  * Default: absolutely NO weights on any tag. Write all tags as plain text.\n"
+        "  * ONLY exception: if the user's input contains an explicit bracket weight such as (小男孩:1.5),\n"
+        "    translate that tag to English and preserve EXACTLY that weight value, e.g. (child male:1.5).\n"
+        "  * AI must NEVER autonomously add weights to any tag — not identity, hair, eyes, or anything else.\n"
+        "  * Strictly forbidden: bare (tag), nested ((tag))/(((tag))), weights >= 2.0, AI-invented weights.\n"
+        "- Chinese field: faithful translation, no attention weights at all."
     )
 
 
@@ -499,7 +448,7 @@ class DeepSeekIllustriousPromptGenerator:
                 "base_negative_prompt": (
                     "STRING",
                     {
-                        "default": "lowres, bad anatomy, bad hands, extra fingers, missing fingers, fused fingers, malformed hands, mutated hands, extra limbs, deformed, poorly drawn face, wrong anatomy, bad proportions, blurry, watermark, text, logo, signature, worst quality, low quality, normal quality, monochrome, grayscale, cinematic lighting, film grain, dramatic shadows, movie style, hdr, high contrast, cinematic composition, color grading, lens flare, depth of field, bokeh, anamorphic, wide angle, dutch angle, intricate background, complex background",
+                        "default": "worst quality, low quality, lowres, photorealistic, raw photo, 3d, cgi, plastic render, oil painting, impasto, thick brush strokes, rough brushwork, watercolor, sketch, lineart, hard cel shading, harsh outlines, oversaturated, strong contrast, crushed blacks, harsh lighting, sharp specular highlights, wet skin, oily skin, sweaty skin, plastic skin, excessive skin pores, hyper-detailed skin, heavy film grain, noisy image, gritty texture, excessive bloom, glowing skin, blurry, foggy, cluttered background, bad anatomy, bad hands, extra fingers, deformed legs, fused legs, bed, glasses",
                         "multiline": True,
                         "label": "Base Negative Prompt",
                         "placeholder": "这里填写强制使用的负面提示词（不由 AI 生成，直接输出）",
@@ -682,10 +631,15 @@ class DeepSeekIllustriousPromptGenerator:
         positive_prompt_chinese = _clean_chinese_prompt_text(parsed.get("positive_prompt_chinese", ""))
         negative_prompt = base_negative_prompt.strip()
 
+        # 前置固定质量/画风词，再拼接用户自定义 base_positive_prompt（若有），最后是 AI 生成内容
         if base_positive_prompt.strip():
-            positive_prompt = _clean_prompt_text(
-                f"{base_positive_prompt.strip()}, {positive_prompt}" if positive_prompt else base_positive_prompt.strip()
-            )
+            content_parts = [p for p in [base_positive_prompt.strip(), positive_prompt] if p]
+            positive_prompt = _clean_prompt_text(", ".join(content_parts))
+
+        if positive_prompt:
+            positive_prompt = f"{FIXED_QUALITY_PREFIX}, {positive_prompt}"
+        else:
+            positive_prompt = FIXED_QUALITY_PREFIX
 
         # raw_response 优先输出最终 content；若有思考过程则一并附上，便于排查
         if reasoning_content.strip():
