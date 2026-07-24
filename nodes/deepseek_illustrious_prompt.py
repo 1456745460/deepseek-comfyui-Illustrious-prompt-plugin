@@ -35,17 +35,10 @@ DEFAULT_SYSTEM_PROMPT = ""
 
 # 固定质量/画风词前缀，始终前置于正向提示词
 FIXED_QUALITY_PREFIX = (
-    "masterpiece, best quality, high quality, absurdres, "
-    "semi-realistic anime style, soft digital painting, "
-    "painterly rendering, smooth shading, smooth gradients, "
-    "soft matte finish, velvety skin texture, "
-    "soft satin-like highlights, low micro-contrast, "
-    "clean rendering, polished illustration, "
-    "soft diffused lighting, warm cinematic lighting, "
-    "subtle rim light, gentle ambient occlusion, "
-    "subtle atmospheric haze, restrained soft bloom, "
-    "muted warm color palette, creamy beige tones, "
-    "delicate fine film grain, clean composition"
+    "masterpiece, best quality, high quality, absurdres,"
+    "(toosaka asagi:0.3),(ask_(askzy):0.5),"
+    "painterly rendering,(matte skin:1.1),(matte style:1.1),Clear lines,"
+    "manai,Jeddtl02,s1_dram,nsfw,"
 )
 
 
