@@ -16,7 +16,7 @@ CONFIG_DIR = PLUGIN_ROOT / "config"
 CONFIG_PATH = CONFIG_DIR / "deepseek_config.ini"
 LEGACY_CONFIG_PATH = CONFIG_DIR / "deepseek_config.json"
 STYLE_PRESET_KEYS = [
-    "baixiaoxi-storyboard",
+    "storyboard-director",
 ]
 
 DEFAULT_SYSTEM_PROMPT = ""
@@ -377,7 +377,7 @@ def _build_user_prompt(
     style_preset: str,
 ) -> str:
     return (
-        "You are the ComfyUI storyboard director for Baixiaoxi.\n"
+        "You are the ComfyUI storyboard director for .\n"
         "From the user description, freeze the single most valuable frame and generate Danbooru-style tags.\n"
         "Return valid json only with exactly these keys: positive_prompt, positive_prompt_chinese.\n"
         f"Style preset: {style_preset}\n"
@@ -402,7 +402,7 @@ class DeepSeekIllustriousPromptGenerator:
             presets = []
         if not presets:
             presets = list(STYLE_PRESET_KEYS)
-        default_preset = presets[0] if presets else "baixiaoxi-storyboard"
+        default_preset = presets[0] if presets else "storyboard-director"
 
         return {
             "required": {

@@ -1,19 +1,15 @@
 import { app } from "/scripts/app.js";
 import { ComfyWidgets } from "/scripts/widgets.js";
 
+const DEFAULT_STYLE_PRESET = "storyboard-director";
+
 let systemPromptPresets = {
-    "illustrious-general": "",
-    "illustrious-anime": "",
-    "illustrious-portrait": "",
-    "illustrious-nsfw": "",
-    "illustrious-sweet": "",
-    "illustrious-photo": "",
-    "illustrious-poster": "",
-    "illustrious-chinese": "",
-    "illustrious-cyberpunk": "",
-    "illustrious-fantasy": "",
-    "illustrious-idol": "",
-    "illustrious-horror": "",
+    [DEFAULT_STYLE_PRESET]: "",
+};
+
+const getStylePresetKeys = () => {
+    const keys = Object.keys(systemPromptPresets || {});
+    return keys.length ? keys : [DEFAULT_STYLE_PRESET];
 };
 
 const loadSystemPromptPresets = async () => {
@@ -21,10 +17,13 @@ const loadSystemPromptPresets = async () => {
         const response = await fetch("/deepseek_illustrious_prompt/config", { cache: "no-store" });
         if (!response.ok) return;
         const data = await response.json();
-        systemPromptPresets = {
-            ...systemPromptPresets,
-            ...(data?.system_prompts || {}),
-        };
+        const loaded = data?.system_prompts || {};
+        // 完全以服务端配置为准，避免残留旧 illustrious-* 预设
+        if (loaded && typeof loaded === "object" && Object.keys(loaded).length > 0) {
+            systemPromptPresets = { ...loaded };
+        } else {
+            systemPromptPresets = { [DEFAULT_STYLE_PRESET]: "" };
+        }
     } catch (error) {
         console.warn("Failed to load DeepSeek system prompts from config:", error);
     }
@@ -57,27 +56,14 @@ const applyPromptWidgetHeights = (node) => {
 const RESULT_VIEWER_NODE_MIN_SIZE = [520, 720];
 const DEEPSEEK_DEFAULTS = {
     model_name: "deepseek-v4-flash",
-    style_preset: "illustrious-general",
+    style_preset: DEFAULT_STYLE_PRESET,
     json_retry_count: 3,
     temperature: 0.2,
     max_tokens: 2000,
     base_url: "https://api.deepseek.com/v1",
 };
 
-const VALID_STYLE_PRESETS = new Set([
-    "illustrious-general",
-    "illustrious-anime",
-    "illustrious-portrait",
-    "illustrious-nsfw",
-    "illustrious-sweet",
-    "illustrious-photo",
-    "illustrious-poster",
-    "illustrious-chinese",
-    "illustrious-cyberpunk",
-    "illustrious-fantasy",
-    "illustrious-idol",
-    "illustrious-horror",
-]);
+const isValidStylePreset = (value) => getStylePresetKeys().includes(value);
 
 const VALID_MODEL_NAMES = new Set(["deepseek-v4-flash", "deepseek-v4-pro", "custom"]);
 
@@ -103,15 +89,43 @@ app.registerExtension({
                 }
             };
 
+            const syncStylePresetWidget = (node) => {
+                const styleWidget = getWidget(node, "style_preset");
+                if (!styleWidget) return;
+
+                const keys = getStylePresetKeys();
+                // 兼容不同 ComfyUI combo 控件结构，强制只保留当前配置中的预设
+                if (styleWidget.options && typeof styleWidget.options === "object") {
+                    if (Array.isArray(styleWidget.options.values)) {
+                        styleWidget.options.values = keys;
+                    } else if (Array.isArray(styleWidget.options)) {
+                        styleWidget.options.length = 0;
+                        keys.forEach((key) => styleWidget.options.push(key));
+                    }
+                }
+                if (Array.isArray(styleWidget.values)) {
+                    styleWidget.values = keys;
+                }
+
+                const fallback = keys[0] || DEEPSEEK_DEFAULTS.style_preset;
+                if (!keys.includes(styleWidget.value)) {
+                    setWidgetValue(styleWidget, fallback);
+                }
+            };
+
             const sanitizeNodeWidgets = (node) => {
+
                 const modelWidget = getWidget(node, "model_name");
                 if (modelWidget && !VALID_MODEL_NAMES.has(modelWidget.value)) {
                     setWidgetValue(modelWidget, DEEPSEEK_DEFAULTS.model_name);
                 }
 
                 const styleWidget = getWidget(node, "style_preset");
-                if (styleWidget && !VALID_STYLE_PRESETS.has(styleWidget.value)) {
-                    setWidgetValue(styleWidget, DEEPSEEK_DEFAULTS.style_preset);
+                if (styleWidget) {
+                    syncStylePresetWidget(node);
+                    if (!isValidStylePreset(styleWidget.value)) {
+                        setWidgetValue(styleWidget, getStylePresetKeys()[0] || DEEPSEEK_DEFAULTS.style_preset);
+                    }
                 }
 
                 const retryWidget = getWidget(node, "json_retry_count");
@@ -170,8 +184,14 @@ app.registerExtension({
                 applyPromptWidgetHeights(this);
                 const styleWidget = getWidget(this, "style_preset");
                 const systemWidget = getWidget(this, "system_prompt");
-                if (styleWidget && systemWidget && !systemWidget.value) {
-                    applyPresetToNode(this, styleWidget.value, true);
+                if (styleWidget) {
+                    // 新建节点默认唯一预设 storyboard-director
+                    if (!isValidStylePreset(styleWidget.value)) {
+                        setWidgetValue(styleWidget, getStylePresetKeys()[0] || DEEPSEEK_DEFAULTS.style_preset);
+                    }
+                    if (systemWidget && (!systemWidget.value || !String(systemWidget.value).trim())) {
+                        applyPresetToNode(this, styleWidget.value, true);
+                    }
                 }
                 return result;
             };
