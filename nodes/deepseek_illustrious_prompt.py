@@ -16,19 +16,7 @@ CONFIG_DIR = PLUGIN_ROOT / "config"
 CONFIG_PATH = CONFIG_DIR / "deepseek_config.ini"
 LEGACY_CONFIG_PATH = CONFIG_DIR / "deepseek_config.json"
 STYLE_PRESET_KEYS = [
-    "illustrious-general",
-    "illustrious-anime",
-    "illustrious-portrait",
-    "illustrious-nsfw",
-    "illustrious-sweet",
-    "illustrious-photo",
-    "illustrious-poster",
-    "illustrious-chinese",
-    "illustrious-cyberpunk",
-    "illustrious-fantasy",
-    "illustrious-idol",
-    "illustrious-horror",
-    "illustrious-photobook",
+    "baixiaoxi-storyboard",
 ]
 
 DEFAULT_SYSTEM_PROMPT = ""
@@ -282,10 +270,15 @@ def _normalize_file_config(raw: Dict[str, Any], source_path: Path) -> Dict[str, 
     except (TypeError, ValueError):
         json_retry_count = 3
 
-    system_prompts = {
-        preset: str(system_prompts_raw.get(preset, "") or "").strip()
-        for preset in STYLE_PRESET_KEYS
-    }
+    # 优先保留配置文件里实际存在的预设；若为空则回退到内置默认键
+    if system_prompts_raw:
+        system_prompts = {
+            str(key).strip(): str(value or "").strip()
+            for key, value in system_prompts_raw.items()
+            if str(key).strip()
+        }
+    else:
+        system_prompts = {preset: "" for preset in STYLE_PRESET_KEYS}
 
     return {
         "api_key": str(raw.get("api_key", "") or "").strip(),
@@ -306,7 +299,7 @@ def _load_ini_file_config(path: Path) -> Dict[str, Any]:
     deepseek_section = parser["deepseek"] if parser.has_section("deepseek") else {}
     system_prompts = {}
     if parser.has_section("system_prompts"):
-        for preset in STYLE_PRESET_KEYS:
+        for preset in parser.options("system_prompts"):
             system_prompts[preset] = str(parser.get("system_prompts", preset, fallback="") or "").strip()
 
     raw = {
@@ -342,7 +335,9 @@ def _load_file_config() -> Dict[str, Any]:
 def get_system_prompt_presets() -> Dict[str, str]:
     file_config = _load_file_config()
     prompts = file_config.get("system_prompts", {}) or {}
-    return {preset: str(prompts.get(preset, "") or "") for preset in STYLE_PRESET_KEYS}
+    if prompts:
+        return {str(k): str(v or "") for k, v in prompts.items()}
+    return {preset: "" for preset in STYLE_PRESET_KEYS}
 
 
 def get_json_retry_count() -> int:
@@ -382,24 +377,19 @@ def _build_user_prompt(
     style_preset: str,
 ) -> str:
     return (
-        "Generate an Illustrious-ready positive prompt.\n"
-        "Also provide a Chinese translation for the positive prompt.\n"
-        "Return valid json only with keys: "
-        "positive_prompt, positive_prompt_chinese.\n"
+        "You are the ComfyUI storyboard director for Baixiaoxi.\n"
+        "From the user description, freeze the single most valuable frame and generate Danbooru-style tags.\n"
+        "Return valid json only with exactly these keys: positive_prompt, positive_prompt_chinese.\n"
         f"Style preset: {style_preset}\n"
         f"User description: {description.strip()}\n"
-        "English positive prompt rules:\n"
-        "- Use concise Danbooru-like English tags/phrases, not long story sentences.\n"
-        "- Prefer concrete visual details over vague adjectives.\n"
-        "- Order: subject identity -> appearance -> pose -> clothing -> scene -> camera -> lighting -> mood.\n"
-        "- DO NOT add quality words or style words (e.g. masterpiece, best quality, anime style). They are prepended by the system.\n"
-        "- Attention weight rules (HIGHEST PRIORITY, strictly enforced):\n"
-        "  * Default: absolutely NO weights on any tag. Write all tags as plain text.\n"
-        "  * ONLY exception: if the user's input contains an explicit bracket weight such as (小男孩:1.5),\n"
-        "    translate that tag to English and preserve EXACTLY that weight value, e.g. (child male:1.5).\n"
-        "  * AI must NEVER autonomously add weights to any tag — not identity, hair, eyes, or anything else.\n"
-        "  * Strictly forbidden: bare (tag), nested ((tag))/(((tag))), weights >= 2.0, AI-invented weights.\n"
-        "- Chinese field: faithful translation, no attention weights at all."
+        "Output rules:\n"
+        "- Output JSON only. No Markdown, no explanation, no <think>, no <pic>.\n"
+        "- positive_prompt: concise English Danbooru tags/phrases, comma-separated, no long story sentences.\n"
+        "- Do NOT include quality/style/artist words (masterpiece, best quality, highres, absurdres, artist names, etc.); the system prepends fixed quality tags.\n"
+        "- Keep user-specified identity/appearance/clothing/scene details, place them early.\n"
+        "- Camera first: choose one task type, one viewpoint, one shot focus, then fill tags.\n"
+        "- Weights are allowed only when they meaningfully stabilize the frame; never invent nested parentheses.\n"
+        "- positive_prompt_chinese: faithful concise Chinese tags/phrases aligned to English semantics, no attention weights."
     )
 
 
@@ -412,7 +402,7 @@ class DeepSeekIllustriousPromptGenerator:
             presets = []
         if not presets:
             presets = list(STYLE_PRESET_KEYS)
-        default_preset = presets[0] if presets else "illustrious-general"
+        default_preset = presets[0] if presets else "baixiaoxi-storyboard"
 
         return {
             "required": {
