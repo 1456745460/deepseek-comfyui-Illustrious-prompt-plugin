@@ -33,6 +33,7 @@ const DEEPSEEK_PROMPT_NODE_MIN_SIZE = [420, 760];
 
 // 各控件在 LiteGraph canvas 中分配的高度（像素），通过覆写 computeSize 生效
 const WIDGET_CANVAS_HEIGHT = {
+    quality_style_lora_prompt: 70, // 质量/画风/Lora，约三行
     base_positive_prompt: 46,   // 约两行
     base_negative_prompt: 46,   // 约两行
     system_prompt:        280,  // 大面积

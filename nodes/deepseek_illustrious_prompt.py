@@ -21,12 +21,12 @@ STYLE_PRESET_KEYS = [
 
 DEFAULT_SYSTEM_PROMPT = ""
 
-# 固定质量/画风词前缀，始终前置于正向提示词
-FIXED_QUALITY_PREFIX = (
+# 默认质量/画风/Lora 提示词，可在节点输入框中手动编辑
+DEFAULT_QUALITY_STYLE_LORA_PROMPT = (
     "masterpiece, best quality, high quality, absurdres,"
     "(toosaka asagi:0.3),(ask_(askzy):0.5),"
     "painterly rendering,(matte skin:1.1),(matte style:1.1),Clear lines,"
-    "manai,Jeddtl02,s1_dram,nsfw,"
+    "manai,Jeddtl02,s1_dram,nsfw"
 )
 
 
@@ -385,7 +385,7 @@ def _build_user_prompt(
         "Output rules:\n"
         "- Output JSON only. No Markdown, no explanation, no <think>, no <pic>.\n"
         "- positive_prompt: concise English Danbooru tags/phrases, comma-separated, no long story sentences.\n"
-        "- Do NOT include quality/style/artist words (masterpiece, best quality, highres, absurdres, artist names, etc.); the system prepends fixed quality tags.\n"
+        "- Do NOT include quality/style/artist words (masterpiece, best quality, highres, absurdres, artist names, etc.); the node prepends editable quality/style/lora tags.\n"
         "- Keep user-specified identity/appearance/clothing/scene details, place them early.\n"
         "- Camera first: choose one task type, one viewpoint, one shot focus, then fill tags.\n"
         "- Weights are allowed only when they meaningfully stabilize the frame; never invent nested parentheses.\n"
@@ -417,6 +417,15 @@ class DeepSeekIllustriousPromptGenerator:
                         "default": DEFAULT_SYSTEM_PROMPT,
                         "multiline": True,
                         "label": "System Prompt",
+                    },
+                ),
+                "quality_style_lora_prompt": (
+                    "STRING",
+                    {
+                        "default": DEFAULT_QUALITY_STYLE_LORA_PROMPT,
+                        "multiline": True,
+                        "label": "质量/画风/Lora 提示词",
+                        "placeholder": "质量词、画风词、Lora 触发词等，会前置于正向提示词",
                     },
                 ),
                 "base_positive_prompt": (
@@ -487,6 +496,7 @@ class DeepSeekIllustriousPromptGenerator:
         model_name: str,
         custom_model: str,
         system_prompt: str,
+        quality_style_lora_prompt: str,
         base_positive_prompt: str,
         base_negative_prompt: str,
         description: str,
@@ -614,15 +624,17 @@ class DeepSeekIllustriousPromptGenerator:
         positive_prompt_chinese = _clean_chinese_prompt_text(parsed.get("positive_prompt_chinese", ""))
         negative_prompt = base_negative_prompt.strip()
 
-        # 前置固定质量/画风词，再拼接用户自定义 base_positive_prompt（若有），最后是 AI 生成内容
-        if base_positive_prompt.strip():
-            content_parts = [p for p in [base_positive_prompt.strip(), positive_prompt] if p]
-            positive_prompt = _clean_prompt_text(", ".join(content_parts))
-
-        if positive_prompt:
-            positive_prompt = f"{FIXED_QUALITY_PREFIX}, {positive_prompt}"
-        else:
-            positive_prompt = FIXED_QUALITY_PREFIX
+        # 前置可编辑的质量/画风/Lora 词，再拼接 base_positive_prompt（若有），最后是 AI 生成内容
+        content_parts = [
+            p
+            for p in [
+                (quality_style_lora_prompt or "").strip(),
+                (base_positive_prompt or "").strip(),
+                positive_prompt,
+            ]
+            if p
+        ]
+        positive_prompt = _clean_prompt_text(", ".join(content_parts)) if content_parts else ""
 
         # raw_response 优先输出最终 content；若有思考过程则一并附上，便于排查
         if reasoning_content.strip():

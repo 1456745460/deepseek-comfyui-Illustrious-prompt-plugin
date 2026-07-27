@@ -58,8 +58,10 @@
   当 `model_name=custom` 时使用
 - `system_prompt`
   当前节点使用的系统提示词。为空时，会自动读取当前 `style_preset` 对应的配置文件内容
+- `quality_style_lora_prompt`
+  质量/画风/Lora 提示词输入框，默认带当前常用质量与画风词，可手动编辑；会前置于最终英文正向提示词
 - `base_positive_prompt`
-  强制拼接到最终英文正向提示词前面
+  强制追加到质量/画风词之后、AI 生成内容之前的基础正向条件
 - `base_negative_prompt`
   强制拼接到最终英文负向提示词前面
 - `description`
