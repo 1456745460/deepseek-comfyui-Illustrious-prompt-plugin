@@ -1,7 +1,7 @@
 [project]
 name = "deepseek-comfyui-illustrious-prompt-plugin"
 description = "DeepSeek-powered Illustrious prompt generator nodes for ComfyUI."
-version = "1.0.4"
+version = "1.0.5"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 dependencies = []
