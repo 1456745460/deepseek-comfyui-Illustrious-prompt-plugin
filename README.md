@@ -8,11 +8,11 @@
 
 ## 界面示例
 
-主节点界面示例：
+文生图调用示例：
 
 ![DeepSeek Illustrious Prompt UI](docs/images/iShot_2026-07-30_10.42.23.png)
 
-风格预设切换示例：
+简单调用示例：
 
 ![Style Preset UI](docs/images/iShot_2026-07-30_10.43.33.png)
 
