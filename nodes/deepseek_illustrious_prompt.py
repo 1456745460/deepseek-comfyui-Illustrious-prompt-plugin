@@ -1,12 +1,48 @@
+import asyncio
 import configparser
 import json
 import math
 from pathlib import Path
+import queue
 import re
 import ssl
+import threading
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Dict, Optional, Tuple
+
+# ──────────────────────────────────────────────────────────
+# 全局流式状态：每个节点实例 (node_id) 持有一个队列
+# 队列中放字符串 chunk，None 表示结束，Exception 表示出错
+# ──────────────────────────────────────────────────────────
+_thinking_streams: Dict[str, queue.Queue] = {}
+_thinking_streams_lock = threading.Lock()
+
+STREAM_SENTINEL = None       # 流结束标志
+STREAM_TTL = 300             # 无活动后自动清理（秒）
+
+
+def get_thinking_stream(node_id: str) -> Optional[queue.Queue]:
+    with _thinking_streams_lock:
+        return _thinking_streams.get(str(node_id))
+
+
+def create_thinking_stream(node_id: str) -> queue.Queue:
+    q: queue.Queue = queue.Queue()
+    with _thinking_streams_lock:
+        _thinking_streams[str(node_id)] = q
+    return q
+
+
+def close_thinking_stream(node_id: str):
+    with _thinking_streams_lock:
+        q = _thinking_streams.pop(str(node_id), None)
+    if q is not None:
+        try:
+            q.put_nowait(STREAM_SENTINEL)
+        except Exception:
+            pass
 
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
@@ -14,10 +50,15 @@ NODE_VERSION = "v1.8"
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = PLUGIN_ROOT / "config"
 CONFIG_PATH = CONFIG_DIR / "deepseek_config.ini"
+CONFIG_PATH_ANIMA = CONFIG_DIR / "deepseek_config_anima.ini"
 LEGACY_CONFIG_PATH = CONFIG_DIR / "deepseek_config.json"
 STYLE_PRESET_KEYS = [
     "storyboard-director",
 ]
+
+CONFIG_MODE_ILLUSTRIOUS = "Illustrious"
+CONFIG_MODE_ANIMA = "Anima"
+CONFIG_MODES = [CONFIG_MODE_ILLUSTRIOUS, CONFIG_MODE_ANIMA]
 
 DEFAULT_SYSTEM_PROMPT = ""
 
@@ -27,6 +68,11 @@ DEFAULT_QUALITY_STYLE_LORA_PROMPT = (
     "(toosaka asagi:0.3),(ask_(askzy):0.5),"
     "painterly rendering,(matte skin:1.1),(matte style:1.1),Clear lines,"
     "manai,Jeddtl02,s1_dram,nsfw"
+)
+
+# Anima 模式专属默认质量/画风/Lora 提示词
+DEFAULT_QUALITY_STYLE_LORA_PROMPT_ANIMA = (
+    "masterpiece, best quality, high quality, absurdres, nsfw,"
 )
 
 
@@ -47,6 +93,93 @@ def _post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int = 1
     with urllib.request.urlopen(req, timeout=timeout, context=ctx) as response:
         body = response.read().decode("utf-8")
     return json.loads(body)
+
+
+def _post_json_stream(
+    url: str,
+    api_key: str,
+    payload: Dict[str, Any],
+    timeout: int = 300,
+    on_reasoning: Optional[Any] = None,
+    on_content: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    流式调用 DeepSeek API，实时回调推理过程和最终内容。
+    返回与 _post_json 相同格式的 dict（choices[0].message.content / reasoning_content）。
+    on_reasoning(chunk: str): 每收到一段推理文本时调用
+    on_content(chunk: str): 每收到一段答案文本时调用
+    """
+    stream_payload = {**payload, "stream": True}
+    data = json.dumps(stream_payload).encode("utf-8")
+    req = urllib.request.Request(
+        url.rstrip("/") + "/chat/completions",
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "text/event-stream",
+            "User-Agent": "ComfyUI-DeepSeek-Illustrious-Prompter/1.0",
+        },
+        method="POST",
+    )
+    ctx = ssl.create_default_context()
+    full_reasoning = []
+    full_content = []
+    finish_reason = None
+
+    with urllib.request.urlopen(req, timeout=timeout, context=ctx) as response:
+        buffer = b""
+        while True:
+            chunk = response.read(512)
+            if not chunk:
+                break
+            buffer += chunk
+            while b"\n" in buffer:
+                line_bytes, buffer = buffer.split(b"\n", 1)
+                line = line_bytes.decode("utf-8").rstrip("\r")
+                if not line.startswith("data:"):
+                    continue
+                raw = line[5:].strip()
+                if raw == "[DONE]":
+                    break
+                try:
+                    evt = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                choices = evt.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta", {})
+                fr = choices[0].get("finish_reason")
+                if fr:
+                    finish_reason = fr
+
+                reasoning_chunk = delta.get("reasoning_content") or delta.get("reasoning") or ""
+                content_chunk = delta.get("content") or ""
+
+                if reasoning_chunk:
+                    full_reasoning.append(reasoning_chunk)
+                    if callable(on_reasoning):
+                        on_reasoning(reasoning_chunk)
+                if content_chunk:
+                    full_content.append(content_chunk)
+                    if callable(on_content):
+                        on_content(content_chunk)
+
+    # 组装成与非流式相同的结构
+    message = {
+        "role": "assistant",
+        "content": "".join(full_content),
+        "reasoning_content": "".join(full_reasoning),
+    }
+    return {
+        "choices": [
+            {
+                "message": message,
+                "finish_reason": finish_reason or "stop",
+            }
+        ]
+    }
 
 
 def _strip_think_blocks(text: str) -> str:
@@ -324,7 +457,11 @@ def _load_json_file_config(path: Path) -> Dict[str, Any]:
     return _normalize_file_config(raw, path)
 
 
-def _load_file_config() -> Dict[str, Any]:
+def _load_file_config(mode: str = CONFIG_MODE_ILLUSTRIOUS) -> Dict[str, Any]:
+    if mode == CONFIG_MODE_ANIMA:
+        if CONFIG_PATH_ANIMA.exists():
+            return _load_ini_file_config(CONFIG_PATH_ANIMA)
+        return {}
     if CONFIG_PATH.exists():
         return _load_ini_file_config(CONFIG_PATH)
     if LEGACY_CONFIG_PATH.exists():
@@ -332,16 +469,16 @@ def _load_file_config() -> Dict[str, Any]:
     return {}
 
 
-def get_system_prompt_presets() -> Dict[str, str]:
-    file_config = _load_file_config()
+def get_system_prompt_presets(mode: str = CONFIG_MODE_ILLUSTRIOUS) -> Dict[str, str]:
+    file_config = _load_file_config(mode)
     prompts = file_config.get("system_prompts", {}) or {}
     if prompts:
         return {str(k): str(v or "") for k, v in prompts.items()}
     return {preset: "" for preset in STYLE_PRESET_KEYS}
 
 
-def get_json_retry_count() -> int:
-    file_config = _load_file_config()
+def get_json_retry_count(mode: str = CONFIG_MODE_ILLUSTRIOUS) -> int:
+    file_config = _load_file_config(mode)
     try:
         return max(0, int(file_config.get("json_retry_count", 3) or 0))
     except (TypeError, ValueError):
@@ -353,8 +490,9 @@ def _resolve_config(
     model_name: str,
     custom_model: str,
     llm_config: Optional[Dict[str, Any]],
+    mode: str = CONFIG_MODE_ILLUSTRIOUS,
 ) -> Tuple[str, str, str]:
-    file_config = _load_file_config()
+    file_config = _load_file_config(mode)
     resolved_api_key = file_config.get("api_key", "")
     resolved_base_url = base_url.strip() or DEFAULT_BASE_URL
     resolved_model = _resolve_model(model_name, custom_model)
@@ -397,7 +535,7 @@ class DeepSeekIllustriousPromptGenerator:
     @classmethod
     def INPUT_TYPES(cls):
         try:
-            presets = list(_load_file_config().get("system_prompts", {}).keys())
+            presets = list(_load_file_config(CONFIG_MODE_ILLUSTRIOUS).get("system_prompts", {}).keys())
         except Exception:
             presets = []
         if not presets:
@@ -406,6 +544,10 @@ class DeepSeekIllustriousPromptGenerator:
 
         return {
             "required": {
+                "config_mode": (
+                    CONFIG_MODES,
+                    {"default": CONFIG_MODE_ILLUSTRIOUS},
+                ),
                 "model_name": (
                     ["deepseek-v4-flash", "deepseek-v4-pro", "custom"],
                     {"default": "deepseek-v4-flash"},
@@ -424,7 +566,7 @@ class DeepSeekIllustriousPromptGenerator:
                     {
                         "default": DEFAULT_QUALITY_STYLE_LORA_PROMPT,
                         "multiline": True,
-                        "label": "质量/画风/Lora 提示词",
+                        "label": "质量/画风/Lora 提示词 (Illustrious默认；切换Anima模式后首次留空可自动填入Anima默认值)",
                         "placeholder": "质量词、画风词、Lora 触发词等，会前置于正向提示词",
                     },
                 ),
@@ -475,6 +617,9 @@ class DeepSeekIllustriousPromptGenerator:
                 "base_url": ("STRING", {"default": DEFAULT_BASE_URL, "multiline": False}),
                 "llm_config": ("LLM_CONFIG",),
             },
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+            },
         }
 
     @classmethod
@@ -493,6 +638,7 @@ class DeepSeekIllustriousPromptGenerator:
 
     def generate(
         self,
+        config_mode: str,
         model_name: str,
         custom_model: str,
         system_prompt: str,
@@ -508,19 +654,30 @@ class DeepSeekIllustriousPromptGenerator:
         reasoning_effort: str = "high",
         base_url: str = DEFAULT_BASE_URL,
         llm_config: Optional[Dict[str, Any]] = None,
+        unique_id: Optional[str] = None,
     ):
         if not description.strip():
             raise ValueError("description 不能为空。")
 
+        mode = config_mode if config_mode in CONFIG_MODES else CONFIG_MODE_ILLUSTRIOUS
+
+        # 根据模式自动选择默认质量/画风/Lora 词：
+        # 当用户未填写（空）时，按当前 mode 填入对应默认值
+        if not quality_style_lora_prompt.strip():
+            if mode == CONFIG_MODE_ANIMA:
+                quality_style_lora_prompt = DEFAULT_QUALITY_STYLE_LORA_PROMPT_ANIMA
+            else:
+                quality_style_lora_prompt = DEFAULT_QUALITY_STYLE_LORA_PROMPT
         resolved_api_key, resolved_base_url, resolved_model = _resolve_config(
-            base_url, model_name, custom_model, llm_config
+            base_url, model_name, custom_model, llm_config, mode
         )
+        config_path_hint = CONFIG_PATH_ANIMA if mode == CONFIG_MODE_ANIMA else CONFIG_PATH
         if not resolved_api_key:
-            raise ValueError(f"未提供 DeepSeek API Key。请在 {CONFIG_PATH} 配置，或连接 LLM_CONFIG。")
+            raise ValueError(f"未提供 DeepSeek API Key。请在 {config_path_hint} 配置，或连接 LLM_CONFIG。")
         if not resolved_model:
             raise ValueError("模型名为空。请在节点中选择模型、填写 custom_model，或在配置文件/LLM_CONFIG 中设置 model。")
 
-        file_system_prompts = get_system_prompt_presets()
+        file_system_prompts = get_system_prompt_presets(mode)
         resolved_system_prompt = system_prompt.strip() or file_system_prompts.get(style_preset, "") or DEFAULT_SYSTEM_PROMPT
 
         payload = {
@@ -550,7 +707,7 @@ class DeepSeekIllustriousPromptGenerator:
         else:
             payload["thinking"] = {"type": "disabled"}
 
-        retry_count = max(0, int(json_retry_count if json_retry_count is not None else get_json_retry_count()))
+        retry_count = max(0, int(json_retry_count if json_retry_count is not None else get_json_retry_count(mode)))
         current_max_tokens = max(128, int(max_tokens or 128))
         token_cap = max(current_max_tokens, AUTO_MAX_TOKENS_CAP)
         max_token_boosts = AUTO_MAX_TOKEN_BOOSTS
@@ -562,58 +719,97 @@ class DeepSeekIllustriousPromptGenerator:
         parse_failures = 0
         token_boosts = 0
 
-        # 解析失败会重试；若判定为输出截断，则额外自动提高 max_tokens 再重试
-        while True:
-            payload["max_tokens"] = current_max_tokens
-            try:
-                data = _post_json(resolved_base_url, resolved_api_key, payload)
-            except urllib.error.HTTPError as exc:
-                body = exc.read().decode("utf-8", errors="ignore")
-                raise RuntimeError(f"DeepSeek API 请求失败: HTTP {exc.code} {body[:300]}") from exc
-            except urllib.error.URLError as exc:
-                raise RuntimeError(f"DeepSeek API 网络错误: {exc.reason}") from exc
+        # 获取节点 ID，用于关联 SSE 流（由 hidden unique_id 注入）
+        node_id = str(unique_id) if unique_id is not None else None
 
-            choices = data.get("choices") or []
-            if not choices:
-                raise RuntimeError(f"模型未返回 choices: {json.dumps(data, ensure_ascii=False)[:500]}")
+        # 创建流式队列（若有 node_id）
+        thinking_queue: Optional[queue.Queue] = None
+        if node_id:
+            thinking_queue = create_thinking_stream(str(node_id))
 
-            choice = choices[0] if isinstance(choices[0], dict) else {}
-            message = choice.get("message", {}) if isinstance(choice, dict) else {}
-            if not isinstance(message, dict):
-                message = {}
-            # 思考模式：最终答案在 content，推理过程在 reasoning_content（API 多轮时会忽略后者）
-            raw_response = str(message.get("content", "") or "")
-            reasoning_content = str(
-                message.get("reasoning_content")
-                or message.get("reasoning")
-                or ""
-            )
-            incomplete = _is_response_incomplete(choice, raw_response)
+        def _on_reasoning(chunk: str):
+            if thinking_queue is not None:
+                try:
+                    thinking_queue.put_nowait(("reasoning", chunk))
+                except Exception:
+                    pass
 
-            # 只要判定输出被截断，就优先自动提高 max_tokens 再重试
-            if incomplete and token_boosts < max_token_boosts and current_max_tokens < token_cap:
-                next_max_tokens = _boost_max_tokens(current_max_tokens, token_cap)
-                if next_max_tokens > current_max_tokens:
-                    current_max_tokens = next_max_tokens
-                    token_boosts += 1
-                    continue
+        def _on_content(chunk: str):
+            if thinking_queue is not None:
+                try:
+                    thinking_queue.put_nowait(("content", chunk))
+                except Exception:
+                    pass
 
-            try:
-                candidate = _extract_json_object(raw_response)
-                if not _has_usable_prompt_fields(candidate):
-                    raise ValueError("模型返回 JSON 中未提取到可用的 positive_prompt")
-                parsed = candidate
-                break
-            except ValueError as exc:
-                last_parse_error = exc
-                if parse_failures >= retry_count:
-                    detail = (
-                        f"DeepSeek 返回内容多次无法解析为目标 JSON，已重试 {retry_count} 次"
-                        f"（其中因截断自动提高 max_tokens {token_boosts} 次，最终 max_tokens={current_max_tokens}）。"
-                        f"最后一次返回: {raw_response[:500]}"
+        try:
+            # 解析失败会重试；若判定为输出截断，则额外自动提高 max_tokens 再重试
+            while True:
+                payload["max_tokens"] = current_max_tokens
+
+                # 每次重试前重置队列中的内容标记（通知前端新一轮开始）
+                if thinking_queue is not None and (parse_failures > 0 or token_boosts > 0):
+                    try:
+                        thinking_queue.put_nowait(("retry", f"retry #{parse_failures + token_boosts}"))
+                    except Exception:
+                        pass
+
+                try:
+                    data = _post_json_stream(
+                        resolved_base_url, resolved_api_key, payload,
+                        on_reasoning=_on_reasoning,
+                        on_content=_on_content,
                     )
-                    raise RuntimeError(detail) from exc
-                parse_failures += 1
+                except urllib.error.HTTPError as exc:
+                    body = exc.read().decode("utf-8", errors="ignore")
+                    raise RuntimeError(f"DeepSeek API 请求失败: HTTP {exc.code} {body[:300]}") from exc
+                except urllib.error.URLError as exc:
+                    raise RuntimeError(f"DeepSeek API 网络错误: {exc.reason}") from exc
+
+                choices = data.get("choices") or []
+                if not choices:
+                    raise RuntimeError(f"模型未返回 choices: {json.dumps(data, ensure_ascii=False)[:500]}")
+
+                choice = choices[0] if isinstance(choices[0], dict) else {}
+                message = choice.get("message", {}) if isinstance(choice, dict) else {}
+                if not isinstance(message, dict):
+                    message = {}
+                # 思考模式：最终答案在 content，推理过程在 reasoning_content
+                raw_response = str(message.get("content", "") or "")
+                reasoning_content = str(
+                    message.get("reasoning_content")
+                    or message.get("reasoning")
+                    or ""
+                )
+                incomplete = _is_response_incomplete(choice, raw_response)
+
+                # 只要判定输出被截断，就优先自动提高 max_tokens 再重试
+                if incomplete and token_boosts < max_token_boosts and current_max_tokens < token_cap:
+                    next_max_tokens = _boost_max_tokens(current_max_tokens, token_cap)
+                    if next_max_tokens > current_max_tokens:
+                        current_max_tokens = next_max_tokens
+                        token_boosts += 1
+                        continue
+
+                try:
+                    candidate = _extract_json_object(raw_response)
+                    if not _has_usable_prompt_fields(candidate):
+                        raise ValueError("模型返回 JSON 中未提取到可用的 positive_prompt")
+                    parsed = candidate
+                    break
+                except ValueError as exc:
+                    last_parse_error = exc
+                    if parse_failures >= retry_count:
+                        detail = (
+                            f"DeepSeek 返回内容多次无法解析为目标 JSON，已重试 {retry_count} 次"
+                            f"（其中因截断自动提高 max_tokens {token_boosts} 次，最终 max_tokens={current_max_tokens}）。"
+                            f"最后一次返回: {raw_response[:500]}"
+                        )
+                        raise RuntimeError(detail) from exc
+                    parse_failures += 1
+        finally:
+            # 无论成功/失败都关闭流，通知前端结束
+            if node_id:
+                close_thinking_stream(str(node_id))
 
         if parsed is None:
             raise RuntimeError(
