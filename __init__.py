@@ -5,8 +5,6 @@ from .nodes.deepseek_illustrious_prompt import (
     NODE_CLASS_MAPPINGS,
     NODE_DISPLAY_NAME_MAPPINGS,
     get_system_prompt_presets,
-    CONFIG_MODE_ILLUSTRIOUS,
-    CONFIG_MODES,
     get_thinking_stream,
 )
 
@@ -16,10 +14,7 @@ try:
 
     @PromptServer.instance.routes.get("/deepseek_illustrious_prompt/config")
     async def deepseek_illustrious_prompt_config(request):
-        mode = request.rel_url.query.get("mode", CONFIG_MODE_ILLUSTRIOUS)
-        if mode not in CONFIG_MODES:
-            mode = CONFIG_MODE_ILLUSTRIOUS
-        return web.json_response({"system_prompts": get_system_prompt_presets(mode), "mode": mode})
+        return web.json_response({"system_prompts": get_system_prompt_presets()})
 
     @PromptServer.instance.routes.get("/deepseek_illustrious_prompt/thinking_stream")
     async def deepseek_thinking_stream(request):

@@ -1,4 +1,3 @@
-import asyncio
 import configparser
 import json
 import math
@@ -7,7 +6,6 @@ import queue
 import re
 import ssl
 import threading
-import time
 import urllib.error
 import urllib.request
 from typing import Any, Dict, Optional, Tuple
@@ -50,15 +48,10 @@ NODE_VERSION = "v1.8"
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = PLUGIN_ROOT / "config"
 CONFIG_PATH = CONFIG_DIR / "deepseek_config.ini"
-CONFIG_PATH_ANIMA = CONFIG_DIR / "deepseek_config_anima.ini"
 LEGACY_CONFIG_PATH = CONFIG_DIR / "deepseek_config.json"
 STYLE_PRESET_KEYS = [
     "storyboard-director",
 ]
-
-CONFIG_MODE_ILLUSTRIOUS = "Illustrious"
-CONFIG_MODE_ANIMA = "Anima"
-CONFIG_MODES = [CONFIG_MODE_ILLUSTRIOUS, CONFIG_MODE_ANIMA]
 
 DEFAULT_SYSTEM_PROMPT = ""
 
@@ -68,11 +61,6 @@ DEFAULT_QUALITY_STYLE_LORA_PROMPT = (
     "(toosaka asagi:0.3),(ask_(askzy):0.5),"
     "painterly rendering,(matte skin:1.1),(matte style:1.1),Clear lines,"
     "manai,Jeddtl02,s1_dram,nsfw"
-)
-
-# Anima 模式专属默认质量/画风/Lora 提示词
-DEFAULT_QUALITY_STYLE_LORA_PROMPT_ANIMA = (
-    "masterpiece, best quality, high quality, absurdres, nsfw,"
 )
 
 
@@ -457,11 +445,7 @@ def _load_json_file_config(path: Path) -> Dict[str, Any]:
     return _normalize_file_config(raw, path)
 
 
-def _load_file_config(mode: str = CONFIG_MODE_ILLUSTRIOUS) -> Dict[str, Any]:
-    if mode == CONFIG_MODE_ANIMA:
-        if CONFIG_PATH_ANIMA.exists():
-            return _load_ini_file_config(CONFIG_PATH_ANIMA)
-        return {}
+def _load_file_config() -> Dict[str, Any]:
     if CONFIG_PATH.exists():
         return _load_ini_file_config(CONFIG_PATH)
     if LEGACY_CONFIG_PATH.exists():
@@ -469,16 +453,16 @@ def _load_file_config(mode: str = CONFIG_MODE_ILLUSTRIOUS) -> Dict[str, Any]:
     return {}
 
 
-def get_system_prompt_presets(mode: str = CONFIG_MODE_ILLUSTRIOUS) -> Dict[str, str]:
-    file_config = _load_file_config(mode)
+def get_system_prompt_presets() -> Dict[str, str]:
+    file_config = _load_file_config()
     prompts = file_config.get("system_prompts", {}) or {}
     if prompts:
         return {str(k): str(v or "") for k, v in prompts.items()}
     return {preset: "" for preset in STYLE_PRESET_KEYS}
 
 
-def get_json_retry_count(mode: str = CONFIG_MODE_ILLUSTRIOUS) -> int:
-    file_config = _load_file_config(mode)
+def get_json_retry_count() -> int:
+    file_config = _load_file_config()
     try:
         return max(0, int(file_config.get("json_retry_count", 3) or 0))
     except (TypeError, ValueError):
@@ -490,9 +474,8 @@ def _resolve_config(
     model_name: str,
     custom_model: str,
     llm_config: Optional[Dict[str, Any]],
-    mode: str = CONFIG_MODE_ILLUSTRIOUS,
 ) -> Tuple[str, str, str]:
-    file_config = _load_file_config(mode)
+    file_config = _load_file_config()
     resolved_api_key = file_config.get("api_key", "")
     resolved_base_url = base_url.strip() or DEFAULT_BASE_URL
     resolved_model = _resolve_model(model_name, custom_model)
@@ -515,7 +498,7 @@ def _build_user_prompt(
     style_preset: str,
 ) -> str:
     return (
-        "You are the ComfyUI storyboard director for .\n"
+        "You are the ComfyUI storyboard director for Illustrious.\n"
         "From the user description, freeze the single most valuable frame and generate Danbooru-style tags.\n"
         "Return valid json only with exactly these keys: positive_prompt, positive_prompt_chinese.\n"
         f"Style preset: {style_preset}\n"
@@ -535,7 +518,7 @@ class DeepSeekIllustriousPromptGenerator:
     @classmethod
     def INPUT_TYPES(cls):
         try:
-            presets = list(_load_file_config(CONFIG_MODE_ILLUSTRIOUS).get("system_prompts", {}).keys())
+            presets = list(_load_file_config().get("system_prompts", {}).keys())
         except Exception:
             presets = []
         if not presets:
@@ -544,10 +527,6 @@ class DeepSeekIllustriousPromptGenerator:
 
         return {
             "required": {
-                "config_mode": (
-                    CONFIG_MODES,
-                    {"default": CONFIG_MODE_ILLUSTRIOUS},
-                ),
                 "model_name": (
                     ["deepseek-v4-flash", "deepseek-v4-pro", "custom"],
                     {"default": "deepseek-v4-flash"},
@@ -566,7 +545,7 @@ class DeepSeekIllustriousPromptGenerator:
                     {
                         "default": DEFAULT_QUALITY_STYLE_LORA_PROMPT,
                         "multiline": True,
-                        "label": "质量/画风/Lora 提示词 (Illustrious默认；切换Anima模式后首次留空可自动填入Anima默认值)",
+                        "label": "质量/画风/Lora 提示词",
                         "placeholder": "质量词、画风词、Lora 触发词等，会前置于正向提示词",
                     },
                 ),
@@ -638,7 +617,6 @@ class DeepSeekIllustriousPromptGenerator:
 
     def generate(
         self,
-        config_mode: str,
         model_name: str,
         custom_model: str,
         system_prompt: str,
@@ -659,25 +637,17 @@ class DeepSeekIllustriousPromptGenerator:
         if not description.strip():
             raise ValueError("description 不能为空。")
 
-        mode = config_mode if config_mode in CONFIG_MODES else CONFIG_MODE_ILLUSTRIOUS
-
-        # 根据模式自动选择默认质量/画风/Lora 词：
-        # 当用户未填写（空）时，按当前 mode 填入对应默认值
         if not quality_style_lora_prompt.strip():
-            if mode == CONFIG_MODE_ANIMA:
-                quality_style_lora_prompt = DEFAULT_QUALITY_STYLE_LORA_PROMPT_ANIMA
-            else:
-                quality_style_lora_prompt = DEFAULT_QUALITY_STYLE_LORA_PROMPT
+            quality_style_lora_prompt = DEFAULT_QUALITY_STYLE_LORA_PROMPT
         resolved_api_key, resolved_base_url, resolved_model = _resolve_config(
-            base_url, model_name, custom_model, llm_config, mode
+            base_url, model_name, custom_model, llm_config
         )
-        config_path_hint = CONFIG_PATH_ANIMA if mode == CONFIG_MODE_ANIMA else CONFIG_PATH
         if not resolved_api_key:
-            raise ValueError(f"未提供 DeepSeek API Key。请在 {config_path_hint} 配置，或连接 LLM_CONFIG。")
+            raise ValueError(f"未提供 DeepSeek API Key。请在 {CONFIG_PATH} 配置，或连接 LLM_CONFIG。")
         if not resolved_model:
             raise ValueError("模型名为空。请在节点中选择模型、填写 custom_model，或在配置文件/LLM_CONFIG 中设置 model。")
 
-        file_system_prompts = get_system_prompt_presets(mode)
+        file_system_prompts = get_system_prompt_presets()
         resolved_system_prompt = system_prompt.strip() or file_system_prompts.get(style_preset, "") or DEFAULT_SYSTEM_PROMPT
 
         payload = {
@@ -707,7 +677,7 @@ class DeepSeekIllustriousPromptGenerator:
         else:
             payload["thinking"] = {"type": "disabled"}
 
-        retry_count = max(0, int(json_retry_count if json_retry_count is not None else get_json_retry_count(mode)))
+        retry_count = max(0, int(json_retry_count if json_retry_count is not None else get_json_retry_count()))
         current_max_tokens = max(128, int(max_tokens or 128))
         token_cap = max(current_max_tokens, AUTO_MAX_TOKENS_CAP)
         max_token_boosts = AUTO_MAX_TOKEN_BOOSTS

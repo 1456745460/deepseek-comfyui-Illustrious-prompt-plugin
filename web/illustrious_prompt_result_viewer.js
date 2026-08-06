@@ -3,50 +3,33 @@ import { api } from "/scripts/api.js";
 import { ComfyWidgets } from "/scripts/widgets.js";
 
 const DEFAULT_STYLE_PRESET = "storyboard-director";
-const CONFIG_MODE_ILLUSTRIOUS = "Illustrious";
-const CONFIG_MODE_ANIMA = "Anima";
 
-// 各模式的默认质量/画风/Lora 提示词（与 Python 端常量保持一致）
-const DEFAULT_QUALITY_STYLE_LORA_PROMPT = {
-    [CONFIG_MODE_ILLUSTRIOUS]: "masterpiece, best quality, high quality, absurdres,(toosaka asagi:0.3),(ask_(askzy):0.5),painterly rendering,(matte skin:1.1),(matte style:1.1),Clear lines,manai,Jeddtl02,s1_dram,nsfw",
-    [CONFIG_MODE_ANIMA]: "masterpiece, best quality, high quality, absurdres, nsfw,",
-};
+// 缓存 presets
+let systemPromptPresets = { [DEFAULT_STYLE_PRESET]: "" };
 
-// 按模式分别缓存 presets
-const systemPromptPresetsMap = {
-    [CONFIG_MODE_ILLUSTRIOUS]: { [DEFAULT_STYLE_PRESET]: "" },
-    [CONFIG_MODE_ANIMA]: { [DEFAULT_STYLE_PRESET]: "" },
-};
+const getSystemPromptPresets = () => systemPromptPresets;
 
-// 当前活跃模式（初始为 Illustrious）
-let activeConfigMode = CONFIG_MODE_ILLUSTRIOUS;
-
-const getSystemPromptPresets = (mode) =>
-    systemPromptPresetsMap[mode] || systemPromptPresetsMap[CONFIG_MODE_ILLUSTRIOUS];
-
-const getStylePresetKeys = (mode) => {
-    const keys = Object.keys(getSystemPromptPresets(mode) || {});
+const getStylePresetKeys = () => {
+    const keys = Object.keys(systemPromptPresets || {});
     return keys.length ? keys : [DEFAULT_STYLE_PRESET];
 };
 
-const loadSystemPromptPresets = async (mode) => {
-    const targetMode = mode || CONFIG_MODE_ILLUSTRIOUS;
+const loadSystemPromptPresets = async () => {
     try {
         const response = await fetch(
-            `/deepseek_illustrious_prompt/config?mode=${encodeURIComponent(targetMode)}`,
+            `/deepseek_illustrious_prompt/config`,
             { cache: "no-store" }
         );
         if (!response.ok) return;
         const data = await response.json();
         const loaded = data?.system_prompts || {};
-        // 完全以服务端配置为准
         if (loaded && typeof loaded === "object" && Object.keys(loaded).length > 0) {
-            systemPromptPresetsMap[targetMode] = { ...loaded };
+            systemPromptPresets = { ...loaded };
         } else {
-            systemPromptPresetsMap[targetMode] = { [DEFAULT_STYLE_PRESET]: "" };
+            systemPromptPresets = { [DEFAULT_STYLE_PRESET]: "" };
         }
     } catch (error) {
-        console.warn(`Failed to load DeepSeek system prompts (mode=${targetMode}):`, error);
+        console.warn("Failed to load DeepSeek system prompts:", error);
     }
 };
 
@@ -85,7 +68,7 @@ const DEEPSEEK_DEFAULTS = {
     base_url: "https://api.deepseek.com/v1",
 };
 
-const isValidStylePreset = (value, mode) => getStylePresetKeys(mode).includes(value);
+const isValidStylePreset = (value) => getStylePresetKeys().includes(value);
 
 const VALID_MODEL_NAMES = new Set(["deepseek-v4-flash", "deepseek-v4-pro", "custom"]);
 
@@ -93,19 +76,10 @@ app.registerExtension({
     name: "Comfy.IllustriousPromptResultViewer",
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name === "DeepSeekIllustriousPromptGenerator" || nodeData.name === "DeepSeek Illustrious Prompt") {
-            // 预加载两种模式的 presets
-            await Promise.all([
-                loadSystemPromptPresets(CONFIG_MODE_ILLUSTRIOUS),
-                loadSystemPromptPresets(CONFIG_MODE_ANIMA),
-            ]);
+            // 预加载 presets
+            await loadSystemPromptPresets();
 
             const getWidget = (node, name) => node.widgets?.find((widget) => widget.name === name);
-
-            const getNodeMode = (node) => {
-                const modeWidget = getWidget(node, "config_mode");
-                const mode = modeWidget?.value;
-                return mode === CONFIG_MODE_ANIMA ? CONFIG_MODE_ANIMA : CONFIG_MODE_ILLUSTRIOUS;
-            };
 
             const setWidgetValue = (widget, value) => {
                 if (!widget) return;
@@ -121,12 +95,11 @@ app.registerExtension({
                 }
             };
 
-            const syncStylePresetWidget = (node, mode) => {
+            const syncStylePresetWidget = (node) => {
                 const styleWidget = getWidget(node, "style_preset");
                 if (!styleWidget) return;
 
-                const currentMode = mode || getNodeMode(node);
-                const keys = getStylePresetKeys(currentMode);
+                const keys = getStylePresetKeys();
                 // 兼容不同 ComfyUI combo 控件结构，强制只保留当前配置中的预设
                 if (styleWidget.options && typeof styleWidget.options === "object") {
                     if (Array.isArray(styleWidget.options.values)) {
@@ -147,8 +120,6 @@ app.registerExtension({
             };
 
             const sanitizeNodeWidgets = (node) => {
-                const mode = getNodeMode(node);
-
                 const modelWidget = getWidget(node, "model_name");
                 if (modelWidget && !VALID_MODEL_NAMES.has(modelWidget.value)) {
                     setWidgetValue(modelWidget, DEEPSEEK_DEFAULTS.model_name);
@@ -156,9 +127,9 @@ app.registerExtension({
 
                 const styleWidget = getWidget(node, "style_preset");
                 if (styleWidget) {
-                    syncStylePresetWidget(node, mode);
-                    if (!isValidStylePreset(styleWidget.value, mode)) {
-                        setWidgetValue(styleWidget, getStylePresetKeys(mode)[0] || DEEPSEEK_DEFAULTS.style_preset);
+                    syncStylePresetWidget(node);
+                    if (!isValidStylePreset(styleWidget.value)) {
+                        setWidgetValue(styleWidget, getStylePresetKeys()[0] || DEEPSEEK_DEFAULTS.style_preset);
                     }
                 }
 
@@ -186,14 +157,13 @@ app.registerExtension({
                 }
             };
 
-            const applyPresetToNode = (node, preset, force = false, mode) => {
+            const applyPresetToNode = (node, preset, force = false) => {
                 const styleWidget = getWidget(node, "style_preset");
                 const systemWidget = getWidget(node, "system_prompt");
                 if (!styleWidget || !systemWidget) return;
 
-                const currentMode = mode || getNodeMode(node);
-                const presets = getSystemPromptPresets(currentMode);
-                // 若 preset key 在当前模式中不存在，尝试取第一个 key 的值
+                const presets = getSystemPromptPresets();
+                // 若 preset key 不存在，尝试取第一个 key 的值
                 let nextValue = presets[preset];
                 if (nextValue === undefined) {
                     const firstKey = Object.keys(presets)[0];
@@ -212,39 +182,6 @@ app.registerExtension({
                 app.graph.setDirtyCanvas(true, true);
             };
 
-            // 切换 config_mode 时，重新同步 style_preset 列表和 system_prompt
-            const onConfigModeChanged = (node, newMode) => {
-                syncStylePresetWidget(node, newMode);
-                const styleWidget = getWidget(node, "style_preset");
-                const keys = getStylePresetKeys(newMode);
-                // 切换模式后，重置 style_preset 为第一个选项
-                const firstPreset = keys[0] || DEEPSEEK_DEFAULTS.style_preset;
-                // 直接赋值，不触发 widget.callback，避免循环
-                if (styleWidget) styleWidget.value = firstPreset;
-                // 强制写入 system_prompt
-                const systemWidget = getWidget(node, "system_prompt");
-                const presets = getSystemPromptPresets(newMode);
-                const promptValue = presets[firstPreset] ?? "";
-                if (systemWidget) {
-                    setWidgetValue(systemWidget, promptValue);
-                }
-                // 切换模式时同步更新质量/画风/Lora 提示词为对应模式的默认值
-                const qualityWidget = getWidget(node, "quality_style_lora_prompt");
-                if (qualityWidget) {
-                    const defaultQuality = DEFAULT_QUALITY_STYLE_LORA_PROMPT[newMode]
-                        || DEFAULT_QUALITY_STYLE_LORA_PROMPT[CONFIG_MODE_ILLUSTRIOUS];
-                    setWidgetValue(qualityWidget, defaultQuality);
-                }
-                const currentSize = Array.isArray(node.size) ? [...node.size] : [...DEEPSEEK_PROMPT_NODE_MIN_SIZE];
-                const computedSize = node.computeSize?.() || currentSize;
-                node.setSize?.([
-                    Math.max(currentSize[0] || 0, computedSize[0] || 0, DEEPSEEK_PROMPT_NODE_MIN_SIZE[0]),
-                    Math.max(currentSize[1] || 0, computedSize[1] || 0, DEEPSEEK_PROMPT_NODE_MIN_SIZE[1]),
-                ]);
-                node.setDirtyCanvas?.(true, true);
-                app.graph.setDirtyCanvas(true, true);
-            };
-
             const originalOnNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 const result = originalOnNodeCreated ? originalOnNodeCreated.apply(this, arguments) : undefined;
@@ -255,15 +192,14 @@ app.registerExtension({
                 ]);
                 sanitizeNodeWidgets(this);
                 applyPromptWidgetHeights(this);
-                const mode = getNodeMode(this);
                 const styleWidget = getWidget(this, "style_preset");
                 const systemWidget = getWidget(this, "system_prompt");
                 if (styleWidget) {
-                    if (!isValidStylePreset(styleWidget.value, mode)) {
-                        setWidgetValue(styleWidget, getStylePresetKeys(mode)[0] || DEEPSEEK_DEFAULTS.style_preset);
+                    if (!isValidStylePreset(styleWidget.value)) {
+                        setWidgetValue(styleWidget, getStylePresetKeys()[0] || DEEPSEEK_DEFAULTS.style_preset);
                     }
                     if (systemWidget && (!systemWidget.value || !String(systemWidget.value).trim())) {
-                        applyPresetToNode(this, styleWidget.value, true, mode);
+                        applyPresetToNode(this, styleWidget.value, true);
                     }
                 }
 
@@ -290,14 +226,7 @@ app.registerExtension({
                 const result = originalOnWidgetChanged
                     ? originalOnWidgetChanged.apply(this, arguments)
                     : undefined;
-                if (name === "config_mode") {
-                    // config_mode 切换：重载对应模式的 presets，再同步 style_preset
-                    // 用 const node 捕获 this，避免 .then() 回调中 this 丢失
-                    const node = this;
-                    loadSystemPromptPresets(value).then(() => {
-                        onConfigModeChanged(node, value);
-                    });
-                } else if (name === "style_preset") {
+                if (name === "style_preset") {
                     applyPresetToNode(this, value, true);
                 }
                 return result;
@@ -561,11 +490,10 @@ app.registerExtension({
                 ]);
                 sanitizeNodeWidgets(this);
                 applyPromptWidgetHeights(this);
-                const mode = getNodeMode(this);
                 const styleWidget = getWidget(this, "style_preset");
                 if (styleWidget) {
-                    syncStylePresetWidget(this, mode);
-                    applyPresetToNode(this, styleWidget.value, true, mode);
+                    syncStylePresetWidget(this);
+                    applyPresetToNode(this, styleWidget.value, true);
                 }
                 return result;
             };
